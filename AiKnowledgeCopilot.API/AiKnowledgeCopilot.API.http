@@ -1,0 +1,6 @@
+@AiKnowledgeCopilot.API_HostAddress = http://localhost:5193
+
+GET {{AiKnowledgeCopilot.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
