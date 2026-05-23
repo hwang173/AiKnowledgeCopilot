@@ -1,3 +1,5 @@
+using AiKnowledgeCopilot.Application.Repositories;
+using AiKnowledgeCopilot.Infrastructure.Repositories;
 using AiKnowledgeCopilot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +10,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection"));
 });
+
+builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 
 // Add services to the container.
 
