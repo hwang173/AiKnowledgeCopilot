@@ -2,6 +2,11 @@ using AiKnowledgeCopilot.Application.Repositories;
 using AiKnowledgeCopilot.Infrastructure.Repositories;
 using AiKnowledgeCopilot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using AiKnowledgeCopilot.Application.Services;
+using AiKnowledgeCopilot.Infrastructure.Services;
+using AiKnowledgeCopilot.Application.Background;
+using AiKnowledgeCopilot.Infrastructure.Background;
+using AiKnowledgeCopilot.Infrastructure.HostedServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +17,15 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 });
 
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
+
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+
+builder.Services.AddSingleton<
+    IDocumentProcessingQueue,
+    InMemoryDocumentProcessingQueue>();
+
+builder.Services.AddHostedService<
+    DocumentProcessingHostedService>();
 
 // Add services to the container.
 
