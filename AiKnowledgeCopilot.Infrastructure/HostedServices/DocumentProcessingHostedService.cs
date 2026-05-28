@@ -1,5 +1,8 @@
 ﻿using AiKnowledgeCopilot.Application.Background;
+using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Application.Repositories;
+using AiKnowledgeCopilot.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -61,6 +64,14 @@ public class DocumentProcessingHostedService
             scope.ServiceProvider
                 .GetRequiredService<IDocumentRepository>();
 
+        var dbContext =
+            scope.ServiceProvider
+                .GetRequiredService<AppDbContext>();
+
+        var chunkingService =
+            scope.ServiceProvider
+                .GetRequiredService<IChunkingService>();
+
         var document =
             await repository.GetByIdAsync(
                 documentId,
@@ -75,6 +86,33 @@ public class DocumentProcessingHostedService
 
         await repository.SaveChangesAsync(
             cancellationToken);
+
+        var fakeDocumentContent =
+        """
+        Dependency Injection is a design pattern
+        used in modern software architecture.
+
+        ASP.NET Core uses a built-in dependency
+        injection container.
+
+        Services can be registered as transient,
+        scoped, or singleton.
+        """;
+
+        var chunks =
+            chunkingService.Chunk(
+                fakeDocumentContent);
+
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            var chunk = new Domain.Entities.Chunk(
+                document.Id,             
+                chunks[i],
+                i);
+
+            document.AddChunk(chunk);
+            dbContext.Entry(chunk).State = EntityState.Added;
+        }
 
         await Task.Delay(5000, cancellationToken);
 

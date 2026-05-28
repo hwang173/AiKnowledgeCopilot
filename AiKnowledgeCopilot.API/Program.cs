@@ -7,6 +7,8 @@ using AiKnowledgeCopilot.Infrastructure.Services;
 using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Infrastructure.Background;
 using AiKnowledgeCopilot.Infrastructure.HostedServices;
+using AiKnowledgeCopilot.Application.Chunking;
+using AiKnowledgeCopilot.Infrastructure.Chunking;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +21,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 
 builder.Services.AddScoped<IDocumentService, DocumentService>();
+
+builder.Services.AddScoped<
+    IChunkingService,
+    SimpleChunkingService>();
 
 builder.Services.AddSingleton<
     IDocumentProcessingQueue,
