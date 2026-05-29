@@ -10,6 +10,8 @@ public class Chunk
 
     public int ChunkIndex { get; private set; }
 
+    public string? Embedding { get; private set; }
+
     private Chunk()
     {
     }
@@ -26,5 +28,10 @@ public class Chunk
         Content = content;
 
         ChunkIndex = chunkIndex;
+    }
+
+    public void SetEmbedding(string embedding)
+    {
+        Embedding = embedding;
     }
 }

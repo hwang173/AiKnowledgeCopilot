@@ -41,6 +41,8 @@ public class AppDbContext : DbContext
 
             builder.Property(x => x.Content)
                 .IsRequired();
+
+            builder.Property(x => x.Embedding);
         });
     }
 }

@@ -9,6 +9,9 @@ using AiKnowledgeCopilot.Infrastructure.Background;
 using AiKnowledgeCopilot.Infrastructure.HostedServices;
 using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Infrastructure.Chunking;
+using System.Net.Http.Headers;
+using AiKnowledgeCopilot.Application.AI;
+using AiKnowledgeCopilot.Infrastructure.AI;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +28,28 @@ builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<
     IChunkingService,
     SimpleChunkingService>();
+
+builder.Services.AddHttpClient<
+    IEmbeddingService,
+    OpenAiEmbeddingService>((serviceProvider, client) =>
+    {
+        var configuration =
+            serviceProvider.GetRequiredService<IConfiguration>();
+
+        var apiKey =
+            configuration["OpenAI:ApiKey"];
+
+        var baseUrl =
+            configuration["OpenAI:BaseUrl"];
+
+        client.BaseAddress =
+            new Uri(baseUrl!);
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                apiKey);
+    });
 
 builder.Services.AddSingleton<
     IDocumentProcessingQueue,

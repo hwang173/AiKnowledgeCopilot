@@ -1,4 +1,5 @@
-﻿using AiKnowledgeCopilot.Application.Background;
+﻿using AiKnowledgeCopilot.Application.AI;
+using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Application.Repositories;
 using AiKnowledgeCopilot.Infrastructure.Persistence;
@@ -72,6 +73,10 @@ public class DocumentProcessingHostedService
             scope.ServiceProvider
                 .GetRequiredService<IChunkingService>();
 
+        var embeddingService =
+            scope.ServiceProvider
+                .GetRequiredService<IEmbeddingService>();
+
         var document =
             await repository.GetByIdAsync(
                 documentId,
@@ -106,12 +111,22 @@ public class DocumentProcessingHostedService
         for (int i = 0; i < chunks.Count; i++)
         {
             var chunk = new Domain.Entities.Chunk(
-                document.Id,             
+                document.Id,
                 chunks[i],
                 i);
 
+            var embedding =
+                await embeddingService
+                    .GenerateEmbeddingAsync(
+                        chunks[i],
+                        cancellationToken);
+
+            chunk.SetEmbedding(embedding);
+
             document.AddChunk(chunk);
-            dbContext.Entry(chunk).State = EntityState.Added;
+
+            dbContext.Entry(chunk).State =
+                EntityState.Added;
         }
 
         await Task.Delay(5000, cancellationToken);
