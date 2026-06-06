@@ -1,17 +1,19 @@
-using AiKnowledgeCopilot.Application.Repositories;
-using AiKnowledgeCopilot.Infrastructure.Repositories;
-using AiKnowledgeCopilot.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
-using AiKnowledgeCopilot.Application.Services;
-using AiKnowledgeCopilot.Infrastructure.Services;
-using AiKnowledgeCopilot.Application.Background;
-using AiKnowledgeCopilot.Infrastructure.Background;
-using AiKnowledgeCopilot.Infrastructure.HostedServices;
-using AiKnowledgeCopilot.Application.Chunking;
-using AiKnowledgeCopilot.Infrastructure.Chunking;
-using System.Net.Http.Headers;
 using AiKnowledgeCopilot.Application.AI;
+using AiKnowledgeCopilot.Application.Background;
+using AiKnowledgeCopilot.Application.Chunking;
+using AiKnowledgeCopilot.Application.Repositories;
+using AiKnowledgeCopilot.Application.Search;
+using AiKnowledgeCopilot.Application.Services;
 using AiKnowledgeCopilot.Infrastructure.AI;
+using AiKnowledgeCopilot.Infrastructure.Background;
+using AiKnowledgeCopilot.Infrastructure.Chunking;
+using AiKnowledgeCopilot.Infrastructure.HostedServices;
+using AiKnowledgeCopilot.Infrastructure.Persistence;
+using AiKnowledgeCopilot.Infrastructure.Repositories;
+using AiKnowledgeCopilot.Infrastructure.Search;
+using AiKnowledgeCopilot.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +30,14 @@ builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<
     IChunkingService,
     SimpleChunkingService>();
+
+builder.Services.AddScoped<
+    ISemanticSearchService,
+    SemanticSearchService>();
+
+builder.Services.AddScoped<
+    IChunkRepository,
+    ChunkRepository>();
 
 builder.Services.AddHttpClient<
     IEmbeddingService,
