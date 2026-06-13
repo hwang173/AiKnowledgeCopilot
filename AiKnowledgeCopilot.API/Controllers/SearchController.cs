@@ -1,4 +1,5 @@
-﻿using AiKnowledgeCopilot.Application.Search;
+﻿using AiKnowledgeCopilot.Application.RAG;
+using AiKnowledgeCopilot.Application.Search;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiKnowledgeCopilot.API.Controllers;
@@ -23,6 +24,7 @@ public class SearchController : ControllerBase
             SearchQuery query,
             CancellationToken cancellationToken)
     {
+
         var results =
             await _semanticSearchService
                 .SearchAsync(

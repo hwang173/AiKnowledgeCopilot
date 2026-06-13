@@ -39,6 +39,14 @@ builder.Services.AddScoped<
     IChunkRepository,
     ChunkRepository>();
 
+builder.Services.AddScoped<
+    IGenerativeAiService,
+    OpenAiGenerativeAiService>();
+
+builder.Services.AddScoped<
+    IQuestionService,
+    QuestionService>();
+
 builder.Services.AddHttpClient<
     IEmbeddingService,
     OpenAiEmbeddingService>((serviceProvider, client) =>
@@ -61,6 +69,29 @@ builder.Services.AddHttpClient<
                 apiKey);
     });
 
+builder.Services.AddHttpClient<
+    IGenerativeAiService,
+    OpenAiGenerativeAiService>(
+(serviceProvider, client) =>
+{
+    var configuration =
+        serviceProvider.GetRequiredService<IConfiguration>();
+
+    var apiKey =
+        configuration["OpenAI:ApiKey"];
+
+    var baseUrl =
+        configuration["OpenAI:BaseUrl"];
+
+    client.BaseAddress =
+        new Uri(baseUrl!);
+
+    client.DefaultRequestHeaders.Authorization =
+        new AuthenticationHeaderValue(
+            "Bearer",
+            apiKey);
+});
+
 builder.Services.AddSingleton<
     IDocumentProcessingQueue,
     InMemoryDocumentProcessingQueue>();
@@ -71,7 +102,6 @@ builder.Services.AddHostedService<
 // Add services to the container.
 
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

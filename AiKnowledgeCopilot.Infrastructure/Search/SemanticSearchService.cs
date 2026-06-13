@@ -8,7 +8,9 @@ namespace AiKnowledgeCopilot.Infrastructure.Search;
 public class SemanticSearchService
     : ISemanticSearchService
 {
-    private const double SimilarityThreshold = 0.75;
+    private const double SimilarityThreshold = 0.5;
+
+    private const int MaxResults = 5;
 
     private readonly IEmbeddingService _embeddingService;
 
@@ -29,55 +31,100 @@ public class SemanticSearchService
         string query,
         CancellationToken cancellationToken)
     {
-        var queryEmbeddingJson =
-            await _embeddingService.GenerateEmbeddingAsync(
+        var queryVector =
+            await GenerateQueryVectorAsync(
                 query,
                 cancellationToken);
 
-        var queryVector =
-            EmbeddingParser.Parse(
-                queryEmbeddingJson);
-
         var chunks =
-            await _chunkRepository.GetAllAsync(
+            await GetSearchableChunksAsync(
                 cancellationToken);
-
-        chunks = chunks
-            .Where(x => x.Embedding != null)
-            .ToList();
 
         var results = new List<SearchResultDto>();
 
         foreach (var chunk in chunks)
         {
-            var chunkVector =
-                EmbeddingParser.Parse(
+            var similarity =
+                CalculateSimilarity(
+                    queryVector,
                     chunk.Embedding!);
 
-            var similarity =
-                SimilarityCalculator
-                    .CosineSimilarity(
-                        queryVector,
-                        chunkVector);
             var result =
-                new SearchResultDto
-                {
-                    ChunkId = chunk.Id,
-
-                    Content = chunk.Content,
-
-                    Similarity = similarity
-                };
+                CreateSearchResult(
+                    chunk,
+                    similarity);
 
             results.Add(result);
         }
 
+        return RankResults(results);
+    }
+
+    private async Task<float[]> GenerateQueryVectorAsync(
+    string query,
+    CancellationToken cancellationToken)
+    {
+        var queryEmbeddingJson =
+            await _embeddingService.GenerateEmbeddingAsync(
+                query,
+                cancellationToken);
+
+        return EmbeddingParser.Parse(
+            queryEmbeddingJson);
+    }
+
+    private async Task<List<Domain.Entities.Chunk>>
+    GetSearchableChunksAsync(
+        CancellationToken cancellationToken)
+    {
+        var chunks =
+            await _chunkRepository.GetAllAsync(
+                cancellationToken);
+
+        return chunks
+            .Where(x => x.Embedding != null)
+            .ToList();
+    }
+
+    private SearchResultDto CreateSearchResult(
+        Domain.Entities.Chunk chunk,
+        double similarity)
+    {
+        return new SearchResultDto
+        {
+            ChunkId = chunk.Id,
+
+            DocumentId = chunk.DocumentId,
+
+            Content = chunk.Content,
+
+            Similarity = similarity
+        };
+    }
+
+    private double CalculateSimilarity(
+    float[] queryVector,
+    string embeddingJson)
+    {
+        var chunkVector =
+            EmbeddingParser.Parse(
+                embeddingJson);
+
+        return SimilarityCalculator
+            .CosineSimilarity(
+                queryVector,
+                chunkVector);
+    }
+
+    private List<SearchResultDto> RankResults(
+    List<SearchResultDto> results)
+    {
         return results
             .Where(x =>
                 x.Similarity >= SimilarityThreshold)
             .OrderByDescending(
                 x => x.Similarity)
-            .Take(5)
+            .Take(MaxResults)
             .ToList();
     }
 }
