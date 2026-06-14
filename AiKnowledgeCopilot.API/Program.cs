@@ -1,21 +1,23 @@
 using AiKnowledgeCopilot.Application.AI;
 using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Chunking;
+using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Repositories;
 using AiKnowledgeCopilot.Application.Search;
 using AiKnowledgeCopilot.Application.Services;
+using AiKnowledgeCopilot.Application.Storage;
 using AiKnowledgeCopilot.Infrastructure.AI;
 using AiKnowledgeCopilot.Infrastructure.Background;
 using AiKnowledgeCopilot.Infrastructure.Chunking;
+using AiKnowledgeCopilot.Infrastructure.Documents;
 using AiKnowledgeCopilot.Infrastructure.HostedServices;
 using AiKnowledgeCopilot.Infrastructure.Persistence;
 using AiKnowledgeCopilot.Infrastructure.Repositories;
 using AiKnowledgeCopilot.Infrastructure.Search;
 using AiKnowledgeCopilot.Infrastructure.Services;
+using AiKnowledgeCopilot.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using System.Net.Http.Headers;
-using AiKnowledgeCopilot.Application.Storage;
-using AiKnowledgeCopilot.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,6 +54,10 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IFileStorageService,
     LocalFileStorageService>();
+
+builder.Services.AddScoped<
+    ITextExtractionService,
+    TextExtractionService>();
 
 builder.Services.AddHttpClient<
     IEmbeddingService,

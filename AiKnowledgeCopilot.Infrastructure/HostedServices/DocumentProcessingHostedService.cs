@@ -4,6 +4,7 @@ using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Application.Repositories;
 using AiKnowledgeCopilot.Application.Storage;
 using AiKnowledgeCopilot.Infrastructure.Persistence;
+using AiKnowledgeCopilot.Application.Documents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -62,28 +63,11 @@ public class DocumentProcessingHostedService
         using var scope =
             _scopeFactory.CreateScope();
 
-        var repository =
-            scope.ServiceProvider
-                .GetRequiredService<IDocumentRepository>();
-
-        var dbContext =
-            scope.ServiceProvider
-                .GetRequiredService<AppDbContext>();
-
-        var chunkingService =
-            scope.ServiceProvider
-                .GetRequiredService<IChunkingService>();
-
-        var embeddingService =
-            scope.ServiceProvider
-                .GetRequiredService<IEmbeddingService>();
-
-        var fileStorageService =
-            scope.ServiceProvider
-                .GetRequiredService<IFileStorageService>();
+        var services =
+            ResolveServices(scope.ServiceProvider);
 
         var document =
-            await repository.GetByIdAsync(
+            await services.Repository.GetByIdAsync(
                 documentId,
                 cancellationToken);
 
@@ -92,80 +76,198 @@ public class DocumentProcessingHostedService
             return;
         }
 
+        if (!await ValidateAndPrepareDocumentAsync(
+            document,
+            services,
+            cancellationToken))
+        {
+            return;
+        }
+
+        await ProcessDocumentContentAsync(
+            document,
+            services,
+            cancellationToken);
+
+        await CompleteProcessingAsync(
+            document,
+            services,
+            cancellationToken);
+    }
+
+    private ProcessingServices ResolveServices(
+        IServiceProvider serviceProvider)
+    {
+        return new ProcessingServices(
+            serviceProvider.GetRequiredService<IDocumentRepository>(),
+            serviceProvider.GetRequiredService<AppDbContext>(),
+            serviceProvider.GetRequiredService<IChunkingService>(),
+            serviceProvider.GetRequiredService<IEmbeddingService>(),
+            serviceProvider.GetRequiredService<ITextExtractionService>());
+    }
+
+    private async Task<bool> ValidateAndPrepareDocumentAsync(
+        Domain.Entities.Document document,
+        ProcessingServices services,
+        CancellationToken cancellationToken)
+    {
         document.MarkAsProcessing();
 
+        if (!await ValidateFileExistsAsync(
+            document,
+            services,
+            cancellationToken))
+        {
+            return false;
+        }
+
+        await services.Repository.SaveChangesAsync(
+            cancellationToken);
+
+        return true;
+    }
+
+    private async Task<bool> ValidateFileExistsAsync(
+        Domain.Entities.Document document,
+        ProcessingServices services,
+        CancellationToken cancellationToken)
+    {
         if (!File.Exists(document.FilePath))
         {
             document.MarkAsFailed();
 
-            await repository.SaveChangesAsync(
+            await services.Repository.SaveChangesAsync(
                 cancellationToken);
 
             _logger.LogError(
                 "File not found: {FilePath}",
                 document.FilePath);
 
-            return;
+            return false;
         }
 
-        await repository.SaveChangesAsync(
-            cancellationToken);
+        return true;
+    }
 
+    private async Task ProcessDocumentContentAsync(
+        Domain.Entities.Document document,
+        ProcessingServices services,
+        CancellationToken cancellationToken)
+    {
         var documentContent =
-            await fileStorageService
-                .ReadTextAsync(
-                    document.FilePath,
-                    cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(
-        documentContent))
-        {
-            document.MarkAsFailed();
-
-            await repository.SaveChangesAsync(
+            await LoadDocumentContentAsync(
+                document,
+                services,
                 cancellationToken);
 
-            _logger.LogWarning(
-                "Document {DocumentId} is empty.",
-                document.Id);
-
+        if (documentContent is null)
+        {
             return;
         }
 
         var chunks =
-            chunkingService.Chunk(
+            services.ChunkingService.Chunk(
                 documentContent);
 
-        for (int i = 0; i < chunks.Count; i++)
-        {
-            var chunk = new Domain.Entities.Chunk(
-                document.Id,
-                chunks[i],
-                i);
-
-            var embedding =
-                await embeddingService
-                    .GenerateEmbeddingAsync(
-                        chunks[i],
-                        cancellationToken);
-
-            chunk.SetEmbedding(embedding);
-
-            document.AddChunk(chunk);
-
-            dbContext.Entry(chunk).State =
-                EntityState.Added;
-        }
+        await ProcessChunksAsync(
+            document,
+            chunks,
+            services,
+            cancellationToken);
 
         await Task.Delay(5000, cancellationToken);
+    }
 
+    private async Task<string?> LoadDocumentContentAsync(
+        Domain.Entities.Document document,
+        ProcessingServices services,
+        CancellationToken cancellationToken)
+    {
+        var documentContent =
+            await services.TextExtractionService
+                .ExtractTextAsync(
+                    document.FilePath,
+                    cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(documentContent))
+        {
+            return documentContent;
+        }
+
+        document.MarkAsFailed();
+
+        await services.Repository.SaveChangesAsync(
+            cancellationToken);
+
+        _logger.LogWarning(
+            "Document {DocumentId} is empty.",
+            document.Id);
+
+        return null;
+    }
+
+    private async Task ProcessChunksAsync(
+        Domain.Entities.Document document,
+        IReadOnlyList<string> chunks,
+        ProcessingServices services,
+        CancellationToken cancellationToken)
+    {
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            await ProcessChunkAsync(
+                document,
+                chunks[i],
+                i,
+                services,
+                cancellationToken);
+        }
+    }
+
+    private async Task ProcessChunkAsync(
+        Domain.Entities.Document document,
+        string chunkContent,
+        int chunkIndex,
+        ProcessingServices services,
+        CancellationToken cancellationToken)
+    {
+        var chunk = new Domain.Entities.Chunk(
+            document.Id,
+            chunkContent,
+            chunkIndex);
+
+        var embedding =
+            await services.EmbeddingService
+                .GenerateEmbeddingAsync(
+                    chunkContent,
+                    cancellationToken);
+
+        chunk.SetEmbedding(embedding);
+
+        document.AddChunk(chunk);
+
+        services.DbContext.Entry(chunk).State =
+            EntityState.Added;
+    }
+
+    private async Task CompleteProcessingAsync(
+        Domain.Entities.Document document,
+        ProcessingServices services,
+        CancellationToken cancellationToken)
+    {
         document.MarkAsCompleted();
 
-        await repository.SaveChangesAsync(
+        await services.Repository.SaveChangesAsync(
             cancellationToken);
 
         _logger.LogInformation(
             "Document {DocumentId} processed.",
-            documentId);
+            document.Id);
     }
+
+    private sealed record ProcessingServices(
+        IDocumentRepository Repository,
+        AppDbContext DbContext,
+        IChunkingService ChunkingService,
+        IEmbeddingService EmbeddingService,
+        ITextExtractionService TextExtractionService);
 }

@@ -138,3 +138,6 @@ coverage/
 # CI/CD
 .github/workflows/secrets.json
 
+# File Storage
+AiKnowledgeCopilot.API/Storage/
+
