@@ -8,6 +8,9 @@ public class Document
 
     public string FileName { get; private set; } = string.Empty;
 
+    public string FilePath { get; private set; }
+    = string.Empty;
+
     public string UploadedByUserId { get; private set; } = string.Empty;
 
     public DateTime UploadedAtUtc { get; private set; }
@@ -22,11 +25,14 @@ public class Document
 
     public Document(
         string fileName,
+        string filePath,
         string uploadedByUserId)
     {
         Id = Guid.NewGuid();
 
         FileName = fileName;
+
+        FilePath = filePath;
 
         UploadedByUserId = uploadedByUserId;
 

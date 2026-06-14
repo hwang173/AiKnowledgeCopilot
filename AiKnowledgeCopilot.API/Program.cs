@@ -14,6 +14,8 @@ using AiKnowledgeCopilot.Infrastructure.Search;
 using AiKnowledgeCopilot.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Net.Http.Headers;
+using AiKnowledgeCopilot.Application.Storage;
+using AiKnowledgeCopilot.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +48,10 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IQuestionService,
     QuestionService>();
+
+builder.Services.AddScoped<
+    IFileStorageService,
+    LocalFileStorageService>();
 
 builder.Services.AddHttpClient<
     IEmbeddingService,

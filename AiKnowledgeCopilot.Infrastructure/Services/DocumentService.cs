@@ -1,33 +1,42 @@
-﻿using AiKnowledgeCopilot.Application.Documents;
+﻿using AiKnowledgeCopilot.Application.Background;
+using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Repositories;
 using AiKnowledgeCopilot.Application.Services;
 using AiKnowledgeCopilot.Domain.Entities;
-using AiKnowledgeCopilot.Application.Background;
 
 namespace AiKnowledgeCopilot.Infrastructure.Services;
 
-public class DocumentService : IDocumentService
+public class DocumentService
+    : IDocumentService
 {
-    private readonly IDocumentRepository _documentRepository;
-    private readonly IDocumentProcessingQueue _queue;
+    private readonly IDocumentRepository
+        _documentRepository;
+
+    private readonly IDocumentProcessingQueue
+        _queue;
 
     public DocumentService(
         IDocumentRepository documentRepository,
         IDocumentProcessingQueue queue)
     {
-        _documentRepository = documentRepository;
-        _queue = queue;
+        _documentRepository =
+            documentRepository;
+
+        _queue =
+            queue;
     }
 
     public async Task<Guid> UploadAsync(
-        UploadDocumentRequest request,
+        UploadDocumentCommand command,
         CancellationToken cancellationToken)
     {
-        ValidateRequest(request);
+        ValidateCommand(command);
 
-        var document = new Document(
-            request.FileName,
-            request.UploadedByUserId);
+        var document =
+            new Document(
+                command.FileName,
+                command.FilePath,
+                command.UploadedByUserId);
 
         await _documentRepository.AddAsync(
             document,
@@ -36,22 +45,31 @@ public class DocumentService : IDocumentService
         await _documentRepository.SaveChangesAsync(
             cancellationToken);
 
-        await _queue.QueueAsync(document.Id);
+        await _queue.QueueAsync(
+            document.Id);
 
         return document.Id;
     }
 
-    private static void ValidateRequest(
-        UploadDocumentRequest request)
+    private static void ValidateCommand(
+        UploadDocumentCommand command)
     {
-        if (string.IsNullOrWhiteSpace(request.FileName))
+        if (string.IsNullOrWhiteSpace(
+            command.FileName))
         {
             throw new ArgumentException(
-                "File name is required.");
+                "FileName is required.");
         }
 
         if (string.IsNullOrWhiteSpace(
-            request.UploadedByUserId))
+            command.FilePath))
+        {
+            throw new ArgumentException(
+                "FilePath is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+            command.UploadedByUserId))
         {
             throw new ArgumentException(
                 "UploadedByUserId is required.");

@@ -26,6 +26,10 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(500);
 
+            builder.Property(x => x.FilePath)
+                .IsRequired()
+                .HasMaxLength(1000);
+
             builder.Property(x => x.UploadedByUserId)
                 .IsRequired()
                 .HasMaxLength(100);

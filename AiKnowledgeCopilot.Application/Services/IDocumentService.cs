@@ -1,10 +1,10 @@
-﻿using AiKnowledgeCopilot.Domain.Entities;
+﻿using AiKnowledgeCopilot.Application.Documents;
 
 namespace AiKnowledgeCopilot.Application.Services;
 
 public interface IDocumentService
 {
     Task<Guid> UploadAsync(
-        Documents.UploadDocumentRequest request,
+        UploadDocumentCommand command,
         CancellationToken cancellationToken);
 }

@@ -2,6 +2,7 @@
 using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Application.Repositories;
+using AiKnowledgeCopilot.Application.Storage;
 using AiKnowledgeCopilot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,6 +78,10 @@ public class DocumentProcessingHostedService
             scope.ServiceProvider
                 .GetRequiredService<IEmbeddingService>();
 
+        var fileStorageService =
+            scope.ServiceProvider
+                .GetRequiredService<IFileStorageService>();
+
         var document =
             await repository.GetByIdAsync(
                 documentId,
@@ -89,24 +94,47 @@ public class DocumentProcessingHostedService
 
         document.MarkAsProcessing();
 
+        if (!File.Exists(document.FilePath))
+        {
+            document.MarkAsFailed();
+
+            await repository.SaveChangesAsync(
+                cancellationToken);
+
+            _logger.LogError(
+                "File not found: {FilePath}",
+                document.FilePath);
+
+            return;
+        }
+
         await repository.SaveChangesAsync(
             cancellationToken);
 
-        var fakeDocumentContent =
-        """
-        Dependency Injection is a design pattern
-        used in modern software architecture.
+        var documentContent =
+            await fileStorageService
+                .ReadTextAsync(
+                    document.FilePath,
+                    cancellationToken);
 
-        ASP.NET Core uses a built-in dependency
-        injection container.
+        if (string.IsNullOrWhiteSpace(
+        documentContent))
+        {
+            document.MarkAsFailed();
 
-        Services can be registered as transient,
-        scoped, or singleton.
-        """;
+            await repository.SaveChangesAsync(
+                cancellationToken);
+
+            _logger.LogWarning(
+                "Document {DocumentId} is empty.",
+                document.Id);
+
+            return;
+        }
 
         var chunks =
             chunkingService.Chunk(
-                fakeDocumentContent);
+                documentContent);
 
         for (int i = 0; i < chunks.Count; i++)
         {

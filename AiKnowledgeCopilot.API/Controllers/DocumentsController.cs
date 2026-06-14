@@ -1,5 +1,7 @@
-﻿using AiKnowledgeCopilot.Application.Documents;
+﻿using AiKnowledgeCopilot.API.Models;
+using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Services;
+using AiKnowledgeCopilot.Application.Storage;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiKnowledgeCopilot.API.Controllers;
@@ -8,27 +10,57 @@ namespace AiKnowledgeCopilot.API.Controllers;
 [Route("documents")]
 public class DocumentsController : ControllerBase
 {
-    private readonly IDocumentService _documentService;
+    private readonly IDocumentService
+        _documentService;
+
+    private readonly IFileStorageService
+        _fileStorageService;
 
     public DocumentsController(
-        IDocumentService documentService)
+        IDocumentService documentService,
+        IFileStorageService fileStorageService)
     {
-        _documentService = documentService;
+        _documentService =
+            documentService;
+
+        _fileStorageService =
+            fileStorageService;
     }
 
     [HttpPost]
     public async Task<IActionResult> Upload(
-        UploadDocumentRequest request,
+        [FromForm] UploadDocumentForm form,
         CancellationToken cancellationToken)
     {
-        var documentId =
-            await _documentService.UploadAsync(
-                request,
-                cancellationToken);
+        var filePath =
+            await _fileStorageService
+                .SaveAsync(
+                    form.File,
+                    cancellationToken);
 
-        return Ok(new
-        {
-            DocumentId = documentId
-        });
+        var command =
+            new UploadDocumentCommand
+            {
+                FileName =
+                    form.File.FileName,
+
+                FilePath =
+                    filePath,
+
+                UploadedByUserId =
+                    form.UploadedByUserId
+            };
+
+        var documentId =
+            await _documentService
+                .UploadAsync(
+                    command,
+                    cancellationToken);
+
+        return Ok(
+            new
+            {
+                DocumentId = documentId
+            });
     }
 }
