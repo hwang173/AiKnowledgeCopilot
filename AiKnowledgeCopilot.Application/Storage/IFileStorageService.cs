@@ -1,11 +1,9 @@
-﻿using Microsoft.AspNetCore.Http;
-
-namespace AiKnowledgeCopilot.Application.Storage;
+﻿namespace AiKnowledgeCopilot.Application.Storage;
 
 public interface IFileStorageService
 {
     Task<string> SaveAsync(
-        IFormFile file,
+        FileUploadRequest request,
         CancellationToken cancellationToken);
 
     Task<string> ReadTextAsync(

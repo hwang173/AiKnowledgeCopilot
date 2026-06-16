@@ -1,5 +1,4 @@
 ﻿using AiKnowledgeCopilot.Application.Storage;
-using Microsoft.AspNetCore.Http;
 
 namespace AiKnowledgeCopilot.Infrastructure.Storage;
 
@@ -7,7 +6,7 @@ public class LocalFileStorageService
     : IFileStorageService
 {
     public async Task<string> SaveAsync(
-        IFormFile file,
+        FileUploadRequest request,
         CancellationToken cancellationToken)
     {
         var storageFolder =
@@ -22,7 +21,7 @@ public class LocalFileStorageService
         }
 
         var uniqueFileName =
-            $"{Guid.NewGuid()}_{file.FileName}";
+            $"{Guid.NewGuid()}_{request.FileName}";
 
         var filePath =
             Path.Combine(
@@ -34,7 +33,7 @@ public class LocalFileStorageService
                 filePath,
                 FileMode.Create);
 
-        await file.CopyToAsync(
+        await request.Content.CopyToAsync(
             stream,
             cancellationToken);
 

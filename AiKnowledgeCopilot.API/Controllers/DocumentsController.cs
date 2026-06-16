@@ -35,7 +35,11 @@ public class DocumentsController : ControllerBase
         var filePath =
             await _fileStorageService
                 .SaveAsync(
-                    form.File,
+                    new FileUploadRequest
+                    {
+                        FileName = form.File.FileName,
+                        Content = form.File.OpenReadStream()
+                    },
                     cancellationToken);
 
         var command =
