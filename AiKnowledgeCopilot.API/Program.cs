@@ -55,6 +55,12 @@ builder.Services.AddScoped<
     IFileStorageService,
     LocalFileStorageService>();
 
+builder.Services.AddScoped<ITextExtractor, TextFileExtractor>();
+
+builder.Services.AddScoped<ITextExtractor, PdfFileExtractor>();
+
+builder.Services.AddScoped<ITextExtractor, DocxFileExtractor>();
+
 builder.Services.AddScoped<
     ITextExtractionService,
     TextExtractionService>();
