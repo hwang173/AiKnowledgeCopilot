@@ -16,15 +16,22 @@ public class DocumentsController : ControllerBase
     private readonly IFileStorageService
         _fileStorageService;
 
+    private readonly IDocumentUploadValidator
+        _uploadValidator;
+
     public DocumentsController(
         IDocumentService documentService,
-        IFileStorageService fileStorageService)
+        IFileStorageService fileStorageService,
+        IDocumentUploadValidator uploadValidator)
     {
         _documentService =
             documentService;
 
         _fileStorageService =
             fileStorageService;
+
+        _uploadValidator =
+            uploadValidator;
     }
 
     [HttpPost]
@@ -32,13 +39,31 @@ public class DocumentsController : ControllerBase
         [FromForm] UploadDocumentForm form,
         CancellationToken cancellationToken)
     {
+        var validationResult =
+            _uploadValidator.Validate(
+                new DocumentUploadValidationRequest
+                {
+                    FileName = form.File?.FileName,
+                    FileSizeInBytes = form.File?.Length ?? 0,
+                    UploadedByUserId = form.UploadedByUserId
+                });
+
+        if (!validationResult.IsValid)
+        {
+            return CreateValidationProblem(
+                validationResult);
+        }
+
         var filePath =
             await _fileStorageService
                 .SaveAsync(
                     new FileUploadRequest
                     {
-                        FileName = form.File.FileName,
-                        Content = form.File.OpenReadStream()
+                        FileName =
+                            validationResult.SanitizedFileName!,
+
+                        Content =
+                            form.File!.OpenReadStream()
                     },
                     cancellationToken);
 
@@ -46,7 +71,7 @@ public class DocumentsController : ControllerBase
             new UploadDocumentCommand
             {
                 FileName =
-                    form.File.FileName,
+                    validationResult.SanitizedFileName!,
 
                 FilePath =
                     filePath,
@@ -66,5 +91,22 @@ public class DocumentsController : ControllerBase
             {
                 DocumentId = documentId
             });
+    }
+
+    private BadRequestObjectResult CreateValidationProblem(
+        DocumentUploadValidationResult validationResult)
+    {
+        var problemDetails =
+            new ProblemDetails
+            {
+                Title = "Document upload validation failed.",
+                Detail = validationResult.ErrorMessage,
+                Status = StatusCodes.Status400BadRequest
+            };
+
+        problemDetails.Extensions["errorCode"] =
+            validationResult.ErrorCode;
+
+        return BadRequest(problemDetails);
     }
 }

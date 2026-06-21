@@ -20,8 +20,11 @@ public class LocalFileStorageService
                 storageFolder);
         }
 
+        var safeFileName =
+            Path.GetFileName(request.FileName);
+
         var uniqueFileName =
-            $"{Guid.NewGuid()}_{request.FileName}";
+            $"{Guid.NewGuid()}_{safeFileName}";
 
         var filePath =
             Path.Combine(

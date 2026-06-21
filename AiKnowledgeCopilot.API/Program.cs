@@ -55,6 +55,20 @@ builder.Services.AddScoped<
     IFileStorageService,
     LocalFileStorageService>();
 
+builder.Services.AddSingleton(
+    builder.Configuration
+        .GetSection(DocumentUploadOptions.SectionName)
+        .Get<DocumentUploadOptions>()
+    ?? new DocumentUploadOptions());
+
+builder.Services.AddScoped<
+    ISupportedDocumentTypesProvider,
+    SupportedDocumentTypesProvider>();
+
+builder.Services.AddScoped<
+    IDocumentUploadValidator,
+    DocumentUploadValidator>();
+
 builder.Services.AddScoped<ITextExtractor, TextFileExtractor>();
 
 builder.Services.AddScoped<ITextExtractor, PdfFileExtractor>();
