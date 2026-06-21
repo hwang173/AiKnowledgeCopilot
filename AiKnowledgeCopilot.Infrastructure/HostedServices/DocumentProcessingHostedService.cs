@@ -1,10 +1,9 @@
 ﻿using AiKnowledgeCopilot.Application.AI;
 using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Chunking;
-using AiKnowledgeCopilot.Application.Repositories;
-using AiKnowledgeCopilot.Application.Storage;
-using AiKnowledgeCopilot.Infrastructure.Persistence;
 using AiKnowledgeCopilot.Application.Documents;
+using AiKnowledgeCopilot.Application.Repositories;
+using AiKnowledgeCopilot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -15,6 +14,8 @@ namespace AiKnowledgeCopilot.Infrastructure.HostedServices;
 public class DocumentProcessingHostedService
     : BackgroundService
 {
+    private const int MaxFailureReasonLength = 2000;
+
     private readonly IDocumentProcessingQueue _queue;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DocumentProcessingHostedService>
@@ -47,11 +48,17 @@ public class DocumentProcessingHostedService
                     documentId,
                     stoppingToken);
             }
+            catch (OperationCanceledException)
+                when (stoppingToken.IsCancellationRequested)
+            {
+                _logger.LogInformation(
+                    "Document processing worker is stopping.");
+            }
             catch (Exception ex)
             {
                 _logger.LogError(
                     ex,
-                    "Error processing document.");
+                    "Unexpected error in document processing worker loop.");
             }
         }
     }
@@ -73,26 +80,49 @@ public class DocumentProcessingHostedService
 
         if (document is null)
         {
+            _logger.LogWarning(
+                "Document {DocumentId} was not found.",
+                documentId);
+
             return;
         }
 
-        if (!await ValidateAndPrepareDocumentAsync(
-            document,
-            services,
-            cancellationToken))
+        try
         {
-            return;
+            if (!await ValidateAndPrepareDocumentAsync(
+                document,
+                services,
+                cancellationToken))
+            {
+                return;
+            }
+
+            if (!await ProcessDocumentContentAsync(
+                document,
+                services,
+                cancellationToken))
+            {
+                return;
+            }
+
+            await CompleteProcessingAsync(
+                document,
+                services,
+                cancellationToken);
         }
-
-        await ProcessDocumentContentAsync(
-            document,
-            services,
-            cancellationToken);
-
-        await CompleteProcessingAsync(
-            document,
-            services,
-            cancellationToken);
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await FailDocumentAsync(
+                document,
+                services,
+                ex,
+                cancellationToken);
+        }
     }
 
     private ProcessingServices ResolveServices(
@@ -132,24 +162,28 @@ public class DocumentProcessingHostedService
         ProcessingServices services,
         CancellationToken cancellationToken)
     {
-        if (!File.Exists(document.FilePath))
+        if (File.Exists(document.FilePath))
         {
-            document.MarkAsFailed();
-
-            await services.Repository.SaveChangesAsync(
-                cancellationToken);
-
-            _logger.LogError(
-                "File not found: {FilePath}",
-                document.FilePath);
-
-            return false;
+            return true;
         }
 
-        return true;
+        var failureReason =
+            $"File not found: {document.FilePath}";
+
+        document.MarkAsFailed(failureReason);
+
+        await services.Repository.SaveChangesAsync(
+            cancellationToken);
+
+        _logger.LogError(
+            "Document {DocumentId} failed because file was not found: {FilePath}",
+            document.Id,
+            document.FilePath);
+
+        return false;
     }
 
-    private async Task ProcessDocumentContentAsync(
+    private async Task<bool> ProcessDocumentContentAsync(
         Domain.Entities.Document document,
         ProcessingServices services,
         CancellationToken cancellationToken)
@@ -162,12 +196,23 @@ public class DocumentProcessingHostedService
 
         if (documentContent is null)
         {
-            return;
+            return false;
         }
 
         var chunks =
             services.ChunkingService.Chunk(
                 documentContent);
+
+        if (chunks.Count == 0)
+        {
+            await FailDocumentAsync(
+                document,
+                services,
+                "Document did not produce any searchable chunks.",
+                cancellationToken);
+
+            return false;
+        }
 
         await ProcessChunksAsync(
             document,
@@ -175,7 +220,7 @@ public class DocumentProcessingHostedService
             services,
             cancellationToken);
 
-        await Task.Delay(5000, cancellationToken);
+        return true;
     }
 
     private async Task<string?> LoadDocumentContentAsync(
@@ -194,14 +239,11 @@ public class DocumentProcessingHostedService
             return documentContent;
         }
 
-        document.MarkAsFailed();
-
-        await services.Repository.SaveChangesAsync(
+        await FailDocumentAsync(
+            document,
+            services,
+            "Document content is empty after text extraction.",
             cancellationToken);
-
-        _logger.LogWarning(
-            "Document {DocumentId} is empty.",
-            document.Id);
 
         return null;
     }
@@ -260,8 +302,85 @@ public class DocumentProcessingHostedService
             cancellationToken);
 
         _logger.LogInformation(
-            "Document {DocumentId} processed.",
+            "Document {DocumentId} processed successfully.",
             document.Id);
+    }
+
+    private async Task FailDocumentAsync(
+        Domain.Entities.Document document,
+        ProcessingServices services,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var failureReason =
+            CreateFailureReason(exception);
+
+        await FailDocumentAsync(
+            document,
+            services,
+            failureReason,
+            cancellationToken);
+
+        _logger.LogError(
+            exception,
+            "Document {DocumentId} failed. Reason: {FailureReason}",
+            document.Id,
+            failureReason);
+    }
+
+    private async Task FailDocumentAsync(
+        Domain.Entities.Document document,
+        ProcessingServices services,
+        string failureReason,
+        CancellationToken cancellationToken)
+    {
+        DiscardPendingChunks(
+            document,
+            services.DbContext);
+
+        document.MarkAsFailed(failureReason);
+
+        await services.Repository.SaveChangesAsync(
+            cancellationToken);
+
+        _logger.LogWarning(
+            "Document {DocumentId} marked as failed. Reason: {FailureReason}",
+            document.Id,
+            failureReason);
+    }
+
+    private static void DiscardPendingChunks(
+        Domain.Entities.Document document,
+        AppDbContext dbContext)
+    {
+        var pendingChunkEntries =
+            dbContext.ChangeTracker
+                .Entries<Domain.Entities.Chunk>()
+                .Where(x => x.State == EntityState.Added)
+                .ToList();
+
+        foreach (var entry in pendingChunkEntries)
+        {
+            document.Chunks.Remove(entry.Entity);
+
+            entry.State = EntityState.Detached;
+        }
+    }
+
+    private static string CreateFailureReason(
+        Exception exception)
+    {
+        var failureReason =
+            string.IsNullOrWhiteSpace(exception.Message)
+                ? exception.GetType().Name
+                : $"{exception.GetType().Name}: {exception.Message}";
+
+        if (failureReason.Length <= MaxFailureReasonLength)
+        {
+            return failureReason;
+        }
+
+        return failureReason[..MaxFailureReasonLength];
     }
 
     private sealed record ProcessingServices(

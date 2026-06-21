@@ -34,6 +34,13 @@ public class AppDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(100);
 
+            builder.Property(x => x.FailureReason)
+                .HasMaxLength(2000);
+
+            builder.Property(x => x.ProcessingStartedAtUtc);
+
+            builder.Property(x => x.ProcessingCompletedAtUtc);
+
             builder.HasMany(x => x.Chunks)
                 .WithOne()
                 .HasForeignKey(x => x.DocumentId);
