@@ -13,6 +13,9 @@ public class DocumentsController : ControllerBase
     private readonly IDocumentService
         _documentService;
 
+    private readonly IDocumentStatusService
+        _documentStatusService;
+
     private readonly IFileStorageService
         _fileStorageService;
 
@@ -21,11 +24,15 @@ public class DocumentsController : ControllerBase
 
     public DocumentsController(
         IDocumentService documentService,
+        IDocumentStatusService documentStatusService,
         IFileStorageService fileStorageService,
         IDocumentUploadValidator uploadValidator)
     {
         _documentService =
             documentService;
+
+        _documentStatusService =
+            documentStatusService;
 
         _fileStorageService =
             fileStorageService;
@@ -86,11 +93,44 @@ public class DocumentsController : ControllerBase
                     command,
                     cancellationToken);
 
-        return Ok(
-            new
+        var response =
+            new UploadDocumentResponse
             {
-                DocumentId = documentId
-            });
+                DocumentId = documentId,
+
+                Status = "Uploaded",
+
+                StatusUrl =
+                    Url.Action(
+                        nameof(GetById),
+                        new { documentId })
+                    ?? $"/documents/{documentId}"
+            };
+
+        return AcceptedAtAction(
+            nameof(GetById),
+            new { documentId },
+            response);
+    }
+
+    [HttpGet("{documentId:guid}")]
+    public async Task<ActionResult<DocumentStatusDto>> GetById(
+        Guid documentId,
+        CancellationToken cancellationToken)
+    {
+        var documentStatus =
+            await _documentStatusService
+                .GetByIdAsync(
+                    documentId,
+                    cancellationToken);
+
+        if (documentStatus is null)
+        {
+            return CreateNotFoundProblem(
+                documentId);
+        }
+
+        return Ok(documentStatus);
     }
 
     private BadRequestObjectResult CreateValidationProblem(
@@ -108,5 +148,22 @@ public class DocumentsController : ControllerBase
             validationResult.ErrorCode;
 
         return BadRequest(problemDetails);
+    }
+
+    private NotFoundObjectResult CreateNotFoundProblem(
+        Guid documentId)
+    {
+        var problemDetails =
+            new ProblemDetails
+            {
+                Title = "Document was not found.",
+                Detail = $"Document '{documentId}' does not exist.",
+                Status = StatusCodes.Status404NotFound
+            };
+
+        problemDetails.Extensions["documentId"] =
+            documentId;
+
+        return NotFound(problemDetails);
     }
 }

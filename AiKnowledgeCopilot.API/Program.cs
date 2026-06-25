@@ -32,6 +32,10 @@ builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 
 builder.Services.AddScoped<
+    IDocumentStatusService,
+    DocumentStatusService>();
+
+builder.Services.AddScoped<
     IChunkingService,
     SimpleChunkingService>();
 
