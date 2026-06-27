@@ -34,6 +34,20 @@ public class DocumentRepository : IDocumentRepository
                 cancellationToken);
     }
 
+    public async Task<Document?> GetByIdForUserAsync(
+        Guid id,
+        string uploadedByUserId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.Documents
+            .Include(x => x.Chunks)
+            .FirstOrDefaultAsync(
+                x =>
+                    x.Id == id &&
+                    x.UploadedByUserId == uploadedByUserId,
+                cancellationToken);
+    }
+
     public async Task SaveChangesAsync(
         CancellationToken cancellationToken)
     {

@@ -12,6 +12,11 @@ public interface IDocumentRepository
         Guid id,
         CancellationToken cancellationToken);
 
+    Task<Document?> GetByIdForUserAsync(
+        Guid id,
+        string uploadedByUserId,
+        CancellationToken cancellationToken);
+
     Task SaveChangesAsync(
         CancellationToken cancellationToken);
 }

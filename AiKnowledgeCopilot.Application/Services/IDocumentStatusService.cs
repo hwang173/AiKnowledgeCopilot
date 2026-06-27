@@ -5,6 +5,6 @@ namespace AiKnowledgeCopilot.Application.Services;
 public interface IDocumentStatusService
 {
     Task<DocumentStatusDto?> GetByIdAsync(
-        Guid documentId,
+        DocumentStatusQuery query,
         CancellationToken cancellationToken);
 }

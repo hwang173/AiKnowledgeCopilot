@@ -1,5 +1,6 @@
 ﻿using AiKnowledgeCopilot.API.Models;
 using AiKnowledgeCopilot.Application.Documents;
+using AiKnowledgeCopilot.Application.Security;
 using AiKnowledgeCopilot.Application.Services;
 using AiKnowledgeCopilot.Application.Storage;
 using Microsoft.AspNetCore.Mvc;
@@ -22,11 +23,15 @@ public class DocumentsController : ControllerBase
     private readonly IDocumentUploadValidator
         _uploadValidator;
 
+    private readonly ICurrentUserContext
+        _currentUserContext;
+
     public DocumentsController(
         IDocumentService documentService,
         IDocumentStatusService documentStatusService,
         IFileStorageService fileStorageService,
-        IDocumentUploadValidator uploadValidator)
+        IDocumentUploadValidator uploadValidator,
+        ICurrentUserContext currentUserContext)
     {
         _documentService =
             documentService;
@@ -39,6 +44,9 @@ public class DocumentsController : ControllerBase
 
         _uploadValidator =
             uploadValidator;
+
+        _currentUserContext =
+            currentUserContext;
     }
 
     [HttpPost]
@@ -46,13 +54,18 @@ public class DocumentsController : ControllerBase
         [FromForm] UploadDocumentForm form,
         CancellationToken cancellationToken)
     {
+        if (!TryGetCurrentUserId(out var requestedByUserId))
+        {
+            return CreateUnauthorizedProblem();
+        }
+
         var validationResult =
             _uploadValidator.Validate(
                 new DocumentUploadValidationRequest
                 {
                     FileName = form.File?.FileName,
                     FileSizeInBytes = form.File?.Length ?? 0,
-                    UploadedByUserId = form.UploadedByUserId
+                    UploadedByUserId = requestedByUserId
                 });
 
         if (!validationResult.IsValid)
@@ -84,7 +97,7 @@ public class DocumentsController : ControllerBase
                     filePath,
 
                 UploadedByUserId =
-                    form.UploadedByUserId
+                    requestedByUserId
             };
 
         var documentId =
@@ -118,10 +131,19 @@ public class DocumentsController : ControllerBase
         Guid documentId,
         CancellationToken cancellationToken)
     {
+        if (!TryGetCurrentUserId(out var requestedByUserId))
+        {
+            return CreateUnauthorizedProblem();
+        }
+
         var documentStatus =
             await _documentStatusService
                 .GetByIdAsync(
-                    documentId,
+                    new DocumentStatusQuery
+                    {
+                        DocumentId = documentId,
+                        RequestedByUserId = requestedByUserId
+                    },
                     cancellationToken);
 
         if (documentStatus is null)
@@ -131,6 +153,44 @@ public class DocumentsController : ControllerBase
         }
 
         return Ok(documentStatus);
+    }
+
+    private bool TryGetCurrentUserId(
+        out string requestedByUserId)
+    {
+        requestedByUserId = string.Empty;
+
+        if (!_currentUserContext.IsAuthenticated)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(
+            _currentUserContext.UserId))
+        {
+            return false;
+        }
+
+        requestedByUserId =
+            _currentUserContext.UserId;
+
+        return true;
+    }
+
+    private UnauthorizedObjectResult CreateUnauthorizedProblem()
+    {
+        var problemDetails =
+            new ProblemDetails
+            {
+                Title = "Authentication is required.",
+                Detail = "The X-User-Id header is required for this development version of the API.",
+                Status = StatusCodes.Status401Unauthorized
+            };
+
+        problemDetails.Extensions["requiredHeader"] =
+            "X-User-Id";
+
+        return Unauthorized(problemDetails);
     }
 
     private BadRequestObjectResult CreateValidationProblem(

@@ -1,9 +1,12 @@
+using AiKnowledgeCopilot.API.Security;
+using AiKnowledgeCopilot.API.Swagger;
 using AiKnowledgeCopilot.Application.AI;
 using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Repositories;
 using AiKnowledgeCopilot.Application.Search;
+using AiKnowledgeCopilot.Application.Security;
 using AiKnowledgeCopilot.Application.Services;
 using AiKnowledgeCopilot.Application.Storage;
 using AiKnowledgeCopilot.Infrastructure.AI;
@@ -26,6 +29,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection"));
 });
+
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddScoped<
+    ICurrentUserContext,
+    HeaderCurrentUserContext>();
 
 builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
 
@@ -139,7 +148,10 @@ builder.Services.AddHostedService<
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.OperationFilter<RequiredUserIdHeaderOperationFilter>();
+});
 
 var app = builder.Build();
 

@@ -19,19 +19,15 @@ public class DocumentStatusService
     }
 
     public async Task<DocumentStatusDto?> GetByIdAsync(
-        Guid documentId,
+        DocumentStatusQuery query,
         CancellationToken cancellationToken)
     {
-        if (documentId == Guid.Empty)
-        {
-            throw new ArgumentException(
-                "DocumentId is required.",
-                nameof(documentId));
-        }
+        ValidateQuery(query);
 
         var document =
-            await _documentRepository.GetByIdAsync(
-                documentId,
+            await _documentRepository.GetByIdForUserAsync(
+                query.DocumentId,
+                query.RequestedByUserId,
                 cancellationToken);
 
         if (document is null)
@@ -40,6 +36,25 @@ public class DocumentStatusService
         }
 
         return MapToDto(document);
+    }
+
+    private static void ValidateQuery(
+        DocumentStatusQuery query)
+    {
+        if (query.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "DocumentId is required.",
+                nameof(query));
+        }
+
+        if (string.IsNullOrWhiteSpace(
+            query.RequestedByUserId))
+        {
+            throw new ArgumentException(
+                "RequestedByUserId is required.",
+                nameof(query));
+        }
     }
 
     private static DocumentStatusDto MapToDto(
