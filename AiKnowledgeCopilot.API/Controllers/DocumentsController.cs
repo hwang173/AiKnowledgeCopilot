@@ -1,13 +1,16 @@
 ﻿using AiKnowledgeCopilot.API.Models;
+using AiKnowledgeCopilot.API.Security;
 using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Security;
 using AiKnowledgeCopilot.Application.Services;
 using AiKnowledgeCopilot.Application.Storage;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiKnowledgeCopilot.API.Controllers;
 
 [ApiController]
+[Authorize(Policy = AuthorizationPolicies.DocumentUser)]
 [Route("documents")]
 public class DocumentsController : ControllerBase
 {
@@ -183,12 +186,9 @@ public class DocumentsController : ControllerBase
             new ProblemDetails
             {
                 Title = "Authentication is required.",
-                Detail = "The X-User-Id header is required for this development version of the API.",
+                Detail = "A valid bearer token with a user id claim is required.",
                 Status = StatusCodes.Status401Unauthorized
             };
-
-        problemDetails.Extensions["requiredHeader"] =
-            "X-User-Id";
 
         return Unauthorized(problemDetails);
     }
