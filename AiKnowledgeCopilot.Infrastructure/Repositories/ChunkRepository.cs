@@ -23,4 +23,18 @@ public class ChunkRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<List<Chunk>> GetSearchableChunksForUserAsync(
+        string uploadedByUserId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.Chunks
+            .AsNoTracking()
+            .Where(chunk =>
+                chunk.Embedding != null &&
+                _dbContext.Documents.Any(document =>
+                    document.Id == chunk.DocumentId &&
+                    document.UploadedByUserId == uploadedByUserId))
+            .ToListAsync(cancellationToken);
+    }
 }

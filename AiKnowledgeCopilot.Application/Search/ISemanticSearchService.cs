@@ -3,6 +3,6 @@
 public interface ISemanticSearchService
 {
     Task<List<SearchResultDto>> SearchAsync(
-        string query,
+        SemanticSearchQuery query,
         CancellationToken cancellationToken);
 }

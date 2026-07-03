@@ -9,7 +9,7 @@ Built a production-style AI-powered enterprise knowledge assistant using ASP.NET
 - Built asynchronous document ingestion pipeline using background workers
 - Applied Clean Architecture + CQRS patterns
 - Implemented Redis caching and retry policies (WIP)
-- Added JWT authentication and role-based authorization (WIP)
+- Added JWT authentication and role-based authorization
 - Designed observability stack with Serilog + OpenTelemetry (WIP)
 - Containerized services using Docker
 - Configured CI/CD pipelines with Azure DevOps (WIP)

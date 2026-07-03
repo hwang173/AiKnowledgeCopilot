@@ -1,7 +1,6 @@
 ﻿using AiKnowledgeCopilot.Application.AI;
-using AiKnowledgeCopilot.Application.Search;
-using AiKnowledgeCopilot.Infrastructure.Persistence;
 using AiKnowledgeCopilot.Application.Repositories;
+using AiKnowledgeCopilot.Application.Search;
 
 namespace AiKnowledgeCopilot.Infrastructure.Search;
 
@@ -28,19 +27,23 @@ public class SemanticSearchService
     }
 
     public async Task<List<SearchResultDto>> SearchAsync(
-        string query,
+        SemanticSearchQuery query,
         CancellationToken cancellationToken)
     {
+        ValidateQuery(query);
+
         var queryVector =
             await GenerateQueryVectorAsync(
-                query,
+                query.Query,
                 cancellationToken);
 
         var chunks =
             await GetSearchableChunksAsync(
+                query.RequestedByUserId,
                 cancellationToken);
 
-        var results = new List<SearchResultDto>();
+        var results =
+            new List<SearchResultDto>();
 
         foreach (var chunk in chunks)
         {
@@ -60,9 +63,28 @@ public class SemanticSearchService
         return RankResults(results);
     }
 
+    private static void ValidateQuery(
+        SemanticSearchQuery query)
+    {
+        if (string.IsNullOrWhiteSpace(query.Query))
+        {
+            throw new ArgumentException(
+                "Search query is required.",
+                nameof(query));
+        }
+
+        if (string.IsNullOrWhiteSpace(
+            query.RequestedByUserId))
+        {
+            throw new ArgumentException(
+                "RequestedByUserId is required.",
+                nameof(query));
+        }
+    }
+
     private async Task<float[]> GenerateQueryVectorAsync(
-    string query,
-    CancellationToken cancellationToken)
+        string query,
+        CancellationToken cancellationToken)
     {
         var queryEmbeddingJson =
             await _embeddingService.GenerateEmbeddingAsync(
@@ -74,19 +96,17 @@ public class SemanticSearchService
     }
 
     private async Task<List<Domain.Entities.Chunk>>
-    GetSearchableChunksAsync(
-        CancellationToken cancellationToken)
+        GetSearchableChunksAsync(
+            string requestedByUserId,
+            CancellationToken cancellationToken)
     {
-        var chunks =
-            await _chunkRepository.GetAllAsync(
+        return await _chunkRepository
+            .GetSearchableChunksForUserAsync(
+                requestedByUserId,
                 cancellationToken);
-
-        return chunks
-            .Where(x => x.Embedding != null)
-            .ToList();
     }
 
-    private SearchResultDto CreateSearchResult(
+    private static SearchResultDto CreateSearchResult(
         Domain.Entities.Chunk chunk,
         double similarity)
     {
@@ -102,9 +122,9 @@ public class SemanticSearchService
         };
     }
 
-    private double CalculateSimilarity(
-    float[] queryVector,
-    string embeddingJson)
+    private static double CalculateSimilarity(
+        float[] queryVector,
+        string embeddingJson)
     {
         var chunkVector =
             EmbeddingParser.Parse(
@@ -116,8 +136,8 @@ public class SemanticSearchService
                 chunkVector);
     }
 
-    private List<SearchResultDto> RankResults(
-    List<SearchResultDto> results)
+    private static List<SearchResultDto> RankResults(
+        List<SearchResultDto> results)
     {
         return results
             .Where(x =>

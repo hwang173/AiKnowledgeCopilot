@@ -5,6 +5,6 @@ namespace AiKnowledgeCopilot.Application.Services;
 public interface IQuestionService
 {
     Task<AnswerResponseDto> AskAsync(
-        string question,
+        QuestionQuery query,
         CancellationToken cancellationToken);
 }
