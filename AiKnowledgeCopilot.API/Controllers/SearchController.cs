@@ -9,23 +9,18 @@ namespace AiKnowledgeCopilot.API.Controllers;
 [ApiController]
 [Authorize(Policy = AuthorizationPolicies.DocumentUser)]
 [Route("api/[controller]")]
-public class SearchController : ControllerBase
+public class SearchController : AuthenticatedControllerBase
 {
     private readonly ISemanticSearchService
         _semanticSearchService;
 
-    private readonly ICurrentUserContext
-        _currentUserContext;
-
     public SearchController(
         ISemanticSearchService semanticSearchService,
         ICurrentUserContext currentUserContext)
+        : base(currentUserContext)
     {
         _semanticSearchService =
             semanticSearchService;
-
-        _currentUserContext =
-            currentUserContext;
     }
 
     [HttpPost]
@@ -57,40 +52,5 @@ public class SearchController : ControllerBase
             };
 
         return Ok(response);
-    }
-
-    private bool TryGetCurrentUserId(
-        out string requestedByUserId)
-    {
-        requestedByUserId = string.Empty;
-
-        if (!_currentUserContext.IsAuthenticated)
-        {
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(
-            _currentUserContext.UserId))
-        {
-            return false;
-        }
-
-        requestedByUserId =
-            _currentUserContext.UserId;
-
-        return true;
-    }
-
-    private UnauthorizedObjectResult CreateUnauthorizedProblem()
-    {
-        var problemDetails =
-            new ProblemDetails
-            {
-                Title = "Authentication is required.",
-                Detail = "A valid bearer token with a user id claim is required.",
-                Status = StatusCodes.Status401Unauthorized
-            };
-
-        return Unauthorized(problemDetails);
     }
 }

@@ -12,7 +12,7 @@ namespace AiKnowledgeCopilot.API.Controllers;
 [ApiController]
 [Authorize(Policy = AuthorizationPolicies.DocumentUser)]
 [Route("documents")]
-public class DocumentsController : ControllerBase
+public class DocumentsController : AuthenticatedControllerBase
 {
     private readonly IDocumentService
         _documentService;
@@ -26,15 +26,13 @@ public class DocumentsController : ControllerBase
     private readonly IDocumentUploadValidator
         _uploadValidator;
 
-    private readonly ICurrentUserContext
-        _currentUserContext;
-
     public DocumentsController(
         IDocumentService documentService,
         IDocumentStatusService documentStatusService,
         IFileStorageService fileStorageService,
         IDocumentUploadValidator uploadValidator,
         ICurrentUserContext currentUserContext)
+        : base(currentUserContext)
     {
         _documentService =
             documentService;
@@ -47,9 +45,6 @@ public class DocumentsController : ControllerBase
 
         _uploadValidator =
             uploadValidator;
-
-        _currentUserContext =
-            currentUserContext;
     }
 
     [HttpPost]
@@ -156,41 +151,6 @@ public class DocumentsController : ControllerBase
         }
 
         return Ok(documentStatus);
-    }
-
-    private bool TryGetCurrentUserId(
-        out string requestedByUserId)
-    {
-        requestedByUserId = string.Empty;
-
-        if (!_currentUserContext.IsAuthenticated)
-        {
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(
-            _currentUserContext.UserId))
-        {
-            return false;
-        }
-
-        requestedByUserId =
-            _currentUserContext.UserId;
-
-        return true;
-    }
-
-    private UnauthorizedObjectResult CreateUnauthorizedProblem()
-    {
-        var problemDetails =
-            new ProblemDetails
-            {
-                Title = "Authentication is required.",
-                Detail = "A valid bearer token with a user id claim is required.",
-                Status = StatusCodes.Status401Unauthorized
-            };
-
-        return Unauthorized(problemDetails);
     }
 
     private BadRequestObjectResult CreateValidationProblem(

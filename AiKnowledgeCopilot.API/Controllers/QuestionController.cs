@@ -11,23 +11,18 @@ namespace AiKnowledgeCopilot.API.Controllers;
 [Authorize(Policy = AuthorizationPolicies.DocumentUser)]
 [Route("api/questions")]
 public class QuestionController
-    : ControllerBase
+    : AuthenticatedControllerBase
 {
     private readonly IQuestionService
         _questionService;
 
-    private readonly ICurrentUserContext
-        _currentUserContext;
-
     public QuestionController(
         IQuestionService questionService,
         ICurrentUserContext currentUserContext)
+        : base(currentUserContext)
     {
         _questionService =
             questionService;
-
-        _currentUserContext =
-            currentUserContext;
     }
 
     [HttpPost("ask")]
@@ -53,40 +48,5 @@ public class QuestionController
                     cancellationToken);
 
         return Ok(answer);
-    }
-
-    private bool TryGetCurrentUserId(
-        out string requestedByUserId)
-    {
-        requestedByUserId = string.Empty;
-
-        if (!_currentUserContext.IsAuthenticated)
-        {
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(
-            _currentUserContext.UserId))
-        {
-            return false;
-        }
-
-        requestedByUserId =
-            _currentUserContext.UserId;
-
-        return true;
-    }
-
-    private UnauthorizedObjectResult CreateUnauthorizedProblem()
-    {
-        var problemDetails =
-            new ProblemDetails
-            {
-                Title = "Authentication is required.",
-                Detail = "A valid bearer token with a user id claim is required.",
-                Status = StatusCodes.Status401Unauthorized
-            };
-
-        return Unauthorized(problemDetails);
     }
 }
