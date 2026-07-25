@@ -167,50 +167,35 @@ builder.Services.AddScoped<
     ITextExtractionService,
     TextExtractionService>();
 
-builder.Services.AddHttpClient<
-    IEmbeddingService,
-    OpenAiEmbeddingService>((serviceProvider, client) =>
-    {
-        var configuration =
-            serviceProvider.GetRequiredService<IConfiguration>();
+var openAiOptions =
+    builder.Configuration
+        .GetSection(OpenAiOptions.SectionName)
+        .Get<OpenAiOptions>()
+    ?? new OpenAiOptions();
 
-        var apiKey =
-            configuration["OpenAI:ApiKey"];
+builder.Services.AddSingleton(openAiOptions);
 
-        var baseUrl =
-            configuration["OpenAI:BaseUrl"];
-
-        client.BaseAddress =
-            new Uri(baseUrl!);
-
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue(
-                "Bearer",
-                apiKey);
-    });
-
-builder.Services.AddHttpClient<
-    IGenerativeAiService,
-    OpenAiGenerativeAiService>(
-(serviceProvider, client) =>
+builder.Services.AddHttpClient<OpenAiHttpClient>((serviceProvider, client) =>
 {
-    var configuration =
-        serviceProvider.GetRequiredService<IConfiguration>();
-
-    var apiKey =
-        configuration["OpenAI:ApiKey"];
-
-    var baseUrl =
-        configuration["OpenAI:BaseUrl"];
+    var options =
+        serviceProvider.GetRequiredService<OpenAiOptions>();
 
     client.BaseAddress =
-        new Uri(baseUrl!);
+        new Uri(options.BaseUrl);
 
     client.DefaultRequestHeaders.Authorization =
         new AuthenticationHeaderValue(
             "Bearer",
-            apiKey);
+            options.ApiKey);
 });
+
+builder.Services.AddScoped<
+    IEmbeddingService,
+    OpenAiEmbeddingService>();
+
+builder.Services.AddScoped<
+    IGenerativeAiService,
+    OpenAiGenerativeAiService>();
 
 builder.Services.AddSingleton<
     IDocumentProcessingQueue,

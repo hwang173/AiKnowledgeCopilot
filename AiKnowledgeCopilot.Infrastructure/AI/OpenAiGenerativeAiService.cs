@@ -1,5 +1,4 @@
-﻿using System.Text;
-using System.Text.Json;
+﻿using System.Text.Json;
 using AiKnowledgeCopilot.Application.AI;
 using AiKnowledgeCopilot.Infrastructure.AI.Models;
 
@@ -8,12 +7,17 @@ namespace AiKnowledgeCopilot.Infrastructure.AI;
 public class OpenAiGenerativeAiService
     : IGenerativeAiService
 {
-    private readonly HttpClient _httpClient;
+    private readonly OpenAiHttpClient _openAiHttpClient;
+
+    private readonly OpenAiOptions _options;
 
     public OpenAiGenerativeAiService(
-        HttpClient httpClient)
+        OpenAiHttpClient openAiHttpClient,
+        OpenAiOptions options)
     {
-        _httpClient = httpClient;
+        _openAiHttpClient = openAiHttpClient;
+
+        _options = options;
     }
 
     public async Task<AnswerResponseDto> GenerateAnswerAsync(
@@ -22,62 +26,55 @@ public class OpenAiGenerativeAiService
         CancellationToken cancellationToken)
     {
         var prompt =
-        string.Join(
-            Environment.NewLine,
-            contextChunks);
+            string.Join(
+                Environment.NewLine,
+                contextChunks);
 
         var request =
-        new ChatCompletionRequest
-        {
-            Model = "gpt-4o-mini"
-        };
+            new ChatCompletionRequest
+            {
+                Model = _options.ChatModel
+            };
 
         request.Messages.Add(
-        new ChatMessage
-        {
-            Role = "system",
-            Content =
-                """
-                You are a helpful AI assistant.
+            new ChatMessage
+            {
+                Role = "system",
+                Content =
+                    """
+                    You are a helpful AI assistant.
 
-                Answer only using the provided context.
+                    Answer only using the provided context.
 
-                If the answer cannot be found,
-                say you do not know.
-                """
-        });
+                    If the answer cannot be found,
+                    say you do not know.
+                    """
+            });
 
         request.Messages.Add(
-        new ChatMessage
-        {
-            Role = "user",
-            Content =
-            $"""
-            Context:
+            new ChatMessage
+            {
+                Role = "user",
+                Content =
+                    $"""
+                    Context:
 
-            {prompt}
+                    {prompt}
 
-            Question:
+                    Question:
 
-            {question}
-            """
-        });
+                    {question}
+                    """
+            });
 
-        var response =
-            await SendRequestAsync(
+        var responseJson =
+            await _openAiHttpClient.PostJsonAsync(
+                "chat/completions",
                 request,
                 cancellationToken);
 
-        response.EnsureSuccessStatusCode();
-
-        var responseJson =
-            await response.Content
-                .ReadAsStringAsync(
-                    cancellationToken);
-
         var chatResponse =
-            ParseResponse(
-                responseJson);
+            ParseResponse(responseJson);
 
         var answer =
             chatResponse
@@ -90,35 +87,12 @@ public class OpenAiGenerativeAiService
             contextChunks);
     }
 
-    private async Task<HttpResponseMessage>
-    SendRequestAsync(
-        ChatCompletionRequest request,
-        CancellationToken cancellationToken)
-    {
-        var json =
-            JsonSerializer.Serialize(
-                request);
-
-        var content =
-            new StringContent(
-                json,
-                Encoding.UTF8,
-                "application/json");
-
-        return await _httpClient.PostAsync(
-            "chat/completions",
-            content,
-            cancellationToken);
-    }
-
-    private static ChatCompletionResponse
-    ParseResponse(
+    private static ChatCompletionResponse ParseResponse(
         string responseJson)
     {
         var response =
-            JsonSerializer.Deserialize<
-                ChatCompletionResponse>(
-                    responseJson);
+            JsonSerializer.Deserialize<ChatCompletionResponse>(
+                responseJson);
 
         if (response is null)
         {
@@ -135,8 +109,7 @@ public class OpenAiGenerativeAiService
         return response;
     }
 
-    private static AnswerResponseDto
-    CreateAnswerResponse(
+    private static AnswerResponseDto CreateAnswerResponse(
         string answer,
         List<string> sources)
     {

@@ -1,6 +1,4 @@
-﻿using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
+﻿using System.Text.Json;
 using AiKnowledgeCopilot.Application.AI;
 
 namespace AiKnowledgeCopilot.Infrastructure.AI;
@@ -8,12 +6,17 @@ namespace AiKnowledgeCopilot.Infrastructure.AI;
 public class OpenAiEmbeddingService
     : IEmbeddingService
 {
-    private readonly HttpClient _httpClient;
+    private readonly OpenAiHttpClient _openAiHttpClient;
+
+    private readonly OpenAiOptions _options;
 
     public OpenAiEmbeddingService(
-        HttpClient httpClient)
+        OpenAiHttpClient openAiHttpClient,
+        OpenAiOptions options)
     {
-        _httpClient = httpClient;
+        _openAiHttpClient = openAiHttpClient;
+
+        _options = options;
     }
 
     public async Task<string> GenerateEmbeddingAsync(
@@ -23,28 +26,13 @@ public class OpenAiEmbeddingService
         var request = new
         {
             input = text,
-            model = "text-embedding-3-small"
+            model = _options.EmbeddingModel
         };
 
-        var json =
-            JsonSerializer.Serialize(request);
-
-        var content =
-            new StringContent(
-                json,
-                Encoding.UTF8,
-                "application/json");
-
-        var response =
-            await _httpClient.PostAsync(
-                "embeddings",
-                content,
-                cancellationToken);
-
-        response.EnsureSuccessStatusCode();
-
         var responseJson =
-            await response.Content.ReadAsStringAsync(
+            await _openAiHttpClient.PostJsonAsync(
+                "embeddings",
+                request,
                 cancellationToken);
 
         using var document =
