@@ -175,6 +175,27 @@ var openAiOptions =
 
 builder.Services.AddSingleton(openAiOptions);
 
+var embeddingCacheOptions =
+    builder.Configuration
+        .GetSection(EmbeddingCacheOptions.SectionName)
+        .Get<EmbeddingCacheOptions>()
+    ?? new EmbeddingCacheOptions();
+
+builder.Services.AddSingleton(embeddingCacheOptions);
+
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration =
+        builder.Configuration.GetConnectionString("Redis");
+
+    options.InstanceName =
+        "AiKnowledgeCopilot:";
+});
+
+builder.Services.AddScoped<
+    IEmbeddingCache,
+    RedisEmbeddingCache>();
+
 builder.Services.AddHttpClient<OpenAiHttpClient>((serviceProvider, client) =>
 {
     var options =
@@ -189,9 +210,11 @@ builder.Services.AddHttpClient<OpenAiHttpClient>((serviceProvider, client) =>
             options.ApiKey);
 });
 
+builder.Services.AddScoped<OpenAiEmbeddingService>();
+
 builder.Services.AddScoped<
     IEmbeddingService,
-    OpenAiEmbeddingService>();
+    CachedEmbeddingService>();
 
 builder.Services.AddScoped<
     IGenerativeAiService,
