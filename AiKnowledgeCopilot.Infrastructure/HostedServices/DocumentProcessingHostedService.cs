@@ -41,11 +41,23 @@ public class DocumentProcessingHostedService
         {
             try
             {
-                var documentId =
-                    await _queue.DequeueAsync(stoppingToken);
+                var message =
+                    await _queue.DequeueAsync(
+                        stoppingToken);
+
+                using var logScope =
+                    BeginProcessingLogScope(message);
+
+                var queueDelayMs =
+                    (DateTime.UtcNow - message.QueuedAtUtc)
+                        .TotalMilliseconds;
+
+                _logger.LogInformation(
+                    "Dequeued document processing message after {QueueDelayMs} ms.",
+                    queueDelayMs);
 
                 await ProcessDocumentAsync(
-                    documentId,
+                    message,
                     stoppingToken);
             }
             catch (OperationCanceledException)
@@ -63,26 +75,39 @@ public class DocumentProcessingHostedService
         }
     }
 
+    private IDisposable? BeginProcessingLogScope(
+        DocumentProcessingMessage message)
+    {
+        return _logger.BeginScope(
+            new Dictionary<string, object>
+            {
+                ["CorrelationId"] = message.CorrelationId,
+                ["DocumentId"] = message.DocumentId,
+                ["QueuedByUserId"] = message.QueuedByUserId,
+                ["QueuedAtUtc"] = message.QueuedAtUtc
+            });
+    }
+
     private async Task ProcessDocumentAsync(
-        Guid documentId,
+        DocumentProcessingMessage message,
         CancellationToken cancellationToken)
     {
-        using var scope =
+        using var serviceScope =
             _scopeFactory.CreateScope();
 
         var services =
-            ResolveServices(scope.ServiceProvider);
+            ResolveServices(serviceScope.ServiceProvider);
 
         var document =
             await services.Repository.GetByIdAsync(
-                documentId,
+                message.DocumentId,
                 cancellationToken);
 
         if (document is null)
         {
             _logger.LogWarning(
                 "Document {DocumentId} was not found.",
-                documentId);
+                message.DocumentId);
 
             return;
         }
@@ -154,6 +179,10 @@ public class DocumentProcessingHostedService
         await services.Repository.SaveChangesAsync(
             cancellationToken);
 
+        _logger.LogInformation(
+            "Document {DocumentId} marked as processing.",
+            document.Id);
+
         return true;
     }
 
@@ -214,6 +243,11 @@ public class DocumentProcessingHostedService
             return false;
         }
 
+        _logger.LogInformation(
+            "Document {DocumentId} produced {ChunkCount} chunks.",
+            document.Id,
+            chunks.Count);
+
         await ProcessChunksAsync(
             document,
             chunks,
@@ -236,6 +270,11 @@ public class DocumentProcessingHostedService
 
         if (!string.IsNullOrWhiteSpace(documentContent))
         {
+            _logger.LogInformation(
+                "Extracted text from document {DocumentId}. TextLength={TextLength}.",
+                document.Id,
+                documentContent.Length);
+
             return documentContent;
         }
 
@@ -272,10 +311,11 @@ public class DocumentProcessingHostedService
         ProcessingServices services,
         CancellationToken cancellationToken)
     {
-        var chunk = new Domain.Entities.Chunk(
-            document.Id,
-            chunkContent,
-            chunkIndex);
+        var chunk =
+            new Domain.Entities.Chunk(
+                document.Id,
+                chunkContent,
+                chunkIndex);
 
         var embedding =
             await services.EmbeddingService
@@ -289,6 +329,11 @@ public class DocumentProcessingHostedService
 
         services.DbContext.Entry(chunk).State =
             EntityState.Added;
+
+        _logger.LogInformation(
+            "Processed chunk {ChunkIndex} for document {DocumentId}.",
+            chunkIndex,
+            document.Id);
     }
 
     private async Task CompleteProcessingAsync(

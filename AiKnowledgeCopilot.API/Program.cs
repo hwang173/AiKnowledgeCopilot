@@ -21,6 +21,8 @@ using AiKnowledgeCopilot.Infrastructure.Repositories;
 using AiKnowledgeCopilot.Infrastructure.Search;
 using AiKnowledgeCopilot.Infrastructure.Services;
 using AiKnowledgeCopilot.Infrastructure.Storage;
+using AiKnowledgeCopilot.API.Observability;
+using AiKnowledgeCopilot.Application.Observability;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -41,13 +43,13 @@ Log.Logger =
         .Enrich.WithEnvironmentName()
         .WriteTo.Console(
             outputTemplate:
-            "[{Timestamp:HH:mm:ss} {Level:u3}] {CorrelationId} {UserId} {RequestMethod} {RequestPath} {Message:lj}{NewLine}{Exception}")
+            "[{Timestamp:HH:mm:ss} {Level:u3}] {CorrelationId} {UserId} {RequestMethod} {RequestPath} {Message:lj} {Properties:j}{NewLine}{Exception}")
         .WriteTo.File(
             path: "Logs/ai-knowledge-copilot-.log",
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 14,
             outputTemplate:
-            "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] CorrelationId={CorrelationId} UserId={UserId} Method={RequestMethod} Path={RequestPath} {Message:lj}{NewLine}{Exception}")
+            "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] CorrelationId={CorrelationId} UserId={UserId} Method={RequestMethod} Path={RequestPath} {Message:lj} {Properties:j}{NewLine}{Exception}")
         .CreateLogger();
 
 try
@@ -78,6 +80,10 @@ try
     });
 
     builder.Services.AddHttpContextAccessor();
+
+    builder.Services.AddScoped<
+    ICorrelationContext,
+    HttpCorrelationContext>();
 
     builder.Services.AddAuthentication(
             JwtBearerDefaults.AuthenticationScheme)

@@ -6,22 +6,64 @@ namespace AiKnowledgeCopilot.Infrastructure.Background;
 public class InMemoryDocumentProcessingQueue
     : IDocumentProcessingQueue
 {
-    private readonly Channel<Guid> _queue;
+    private readonly Channel<DocumentProcessingMessage>
+        _queue;
 
     public InMemoryDocumentProcessingQueue()
     {
-        _queue = Channel.CreateUnbounded<Guid>();
+        _queue =
+            Channel.CreateUnbounded<DocumentProcessingMessage>();
     }
 
-    public async ValueTask QueueAsync(Guid documentId)
+    public async ValueTask QueueAsync(
+        DocumentProcessingMessage message,
+        CancellationToken cancellationToken)
     {
-        await _queue.Writer.WriteAsync(documentId);
+        ValidateMessage(message);
+
+        await _queue.Writer.WriteAsync(
+            message,
+            cancellationToken);
     }
 
-    public async ValueTask<Guid> DequeueAsync(
+    public async ValueTask<DocumentProcessingMessage> DequeueAsync(
         CancellationToken cancellationToken)
     {
         return await _queue.Reader.ReadAsync(
             cancellationToken);
+    }
+
+    private static void ValidateMessage(
+        DocumentProcessingMessage message)
+    {
+        if (message.DocumentId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "DocumentId is required.",
+                nameof(message));
+        }
+
+        if (string.IsNullOrWhiteSpace(
+            message.CorrelationId))
+        {
+            throw new ArgumentException(
+                "CorrelationId is required.",
+                nameof(message));
+        }
+
+        if (string.IsNullOrWhiteSpace(
+            message.QueuedByUserId))
+        {
+            throw new ArgumentException(
+                "QueuedByUserId is required.",
+                nameof(message));
+        }
+
+        if (message.QueuedAtUtc == default)
+        {
+            throw new ArgumentException(
+                "QueuedAtUtc is required.",
+                nameof(message));
+        }
     }
 }

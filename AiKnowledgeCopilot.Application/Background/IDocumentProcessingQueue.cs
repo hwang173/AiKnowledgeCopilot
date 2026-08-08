@@ -2,8 +2,10 @@
 
 public interface IDocumentProcessingQueue
 {
-    ValueTask QueueAsync(Guid documentId);
+    ValueTask QueueAsync(
+        DocumentProcessingMessage message,
+        CancellationToken cancellationToken);
 
-    ValueTask<Guid> DequeueAsync(
+    ValueTask<DocumentProcessingMessage> DequeueAsync(
         CancellationToken cancellationToken);
 }

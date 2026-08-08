@@ -1,13 +1,11 @@
-﻿using AiKnowledgeCopilot.Application.Security;
+﻿using AiKnowledgeCopilot.API.Observability;
+using AiKnowledgeCopilot.Application.Security;
 using Serilog.Context;
 
 namespace AiKnowledgeCopilot.API.Middleware;
 
 public class RequestCorrelationMiddleware
 {
-    public const string CorrelationIdHeaderName =
-        "X-Correlation-Id";
-
     private readonly RequestDelegate _next;
 
     public RequestCorrelationMiddleware(
@@ -23,7 +21,11 @@ public class RequestCorrelationMiddleware
         var correlationId =
             GetOrCreateCorrelationId(httpContext);
 
-        httpContext.Response.Headers[CorrelationIdHeaderName] =
+        httpContext.Items[HttpCorrelationContext.CorrelationIdItemKey] =
+            correlationId;
+
+        httpContext.Response.Headers[
+            HttpCorrelationContext.CorrelationIdHeaderName] =
             correlationId;
 
         using (LogContext.PushProperty(
@@ -47,7 +49,7 @@ public class RequestCorrelationMiddleware
         HttpContext httpContext)
     {
         if (httpContext.Request.Headers.TryGetValue(
-                CorrelationIdHeaderName,
+                HttpCorrelationContext.CorrelationIdHeaderName,
                 out var correlationIdValues))
         {
             var correlationId =
