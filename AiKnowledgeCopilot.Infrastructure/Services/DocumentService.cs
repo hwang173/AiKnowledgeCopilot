@@ -66,9 +66,26 @@ public class DocumentService
                 document,
                 command.UploadedByUserId);
 
-        await _queue.QueueAsync(
-            message,
-            cancellationToken);
+        try
+        {
+            await _queue.QueueAsync(
+                message,
+                cancellationToken);
+        }
+        catch (DocumentProcessingQueueFullException)
+        {
+            document.MarkAsFailed(
+                "Document processing queue is currently full. Please try uploading again later.");
+
+            await _documentRepository.SaveChangesAsync(
+                cancellationToken);
+
+            _logger.LogWarning(
+                "Document {DocumentId} was marked as failed because the processing queue is full.",
+                document.Id);
+
+            throw;
+        }
 
         _logger.LogInformation(
             "Document {DocumentId} queued for processing by user {QueuedByUserId}.",

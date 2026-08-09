@@ -1,5 +1,6 @@
 ﻿using AiKnowledgeCopilot.API.Models;
 using AiKnowledgeCopilot.API.Security;
+using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Security;
 using AiKnowledgeCopilot.Application.Services;
@@ -98,11 +99,20 @@ public class DocumentsController : AuthenticatedControllerBase
                     requestedByUserId
             };
 
-        var documentId =
-            await _documentService
-                .UploadAsync(
-                    command,
-                    cancellationToken);
+        Guid documentId;
+
+        try
+        {
+            documentId =
+                await _documentService
+                    .UploadAsync(
+                        command,
+                        cancellationToken);
+        }
+        catch (DocumentProcessingQueueFullException ex)
+        {
+            return CreateQueueFullProblem(ex);
+        }
 
         var response =
             new UploadDocumentResponse
@@ -151,6 +161,28 @@ public class DocumentsController : AuthenticatedControllerBase
         }
 
         return Ok(documentStatus);
+    }
+
+    private ObjectResult CreateQueueFullProblem(
+        DocumentProcessingQueueFullException exception)
+    {
+        var problemDetails =
+            new ProblemDetails
+            {
+                Title = "Document processing queue is full.",
+                Detail = "The system is currently busy processing documents. Please try again later.",
+                Status = StatusCodes.Status503ServiceUnavailable
+            };
+
+        problemDetails.Extensions["queueCapacity"] =
+            exception.Capacity;
+
+        problemDetails.Extensions["enqueueTimeoutSeconds"] =
+            exception.EnqueueTimeout.TotalSeconds;
+
+        return StatusCode(
+            StatusCodes.Status503ServiceUnavailable,
+            problemDetails);
     }
 
     private BadRequestObjectResult CreateValidationProblem(

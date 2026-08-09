@@ -252,6 +252,14 @@ try
         IGenerativeAiService,
         OpenAiGenerativeAiService>();
 
+    var documentProcessingQueueOptions =
+    builder.Configuration
+        .GetSection(DocumentProcessingQueueOptions.SectionName)
+        .Get<DocumentProcessingQueueOptions>()
+    ?? new DocumentProcessingQueueOptions();
+
+    builder.Services.AddSingleton(documentProcessingQueueOptions);
+
     builder.Services.AddSingleton<
         IDocumentProcessingQueue,
         InMemoryDocumentProcessingQueue>();

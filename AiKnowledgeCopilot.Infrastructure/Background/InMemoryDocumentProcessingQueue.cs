@@ -1,5 +1,6 @@
 ﻿using System.Threading.Channels;
 using AiKnowledgeCopilot.Application.Background;
+using Microsoft.Extensions.Logging;
 
 namespace AiKnowledgeCopilot.Infrastructure.Background;
 
@@ -9,10 +10,31 @@ public class InMemoryDocumentProcessingQueue
     private readonly Channel<DocumentProcessingMessage>
         _queue;
 
-    public InMemoryDocumentProcessingQueue()
+    private readonly DocumentProcessingQueueOptions
+        _options;
+
+    private readonly ILogger<InMemoryDocumentProcessingQueue>
+        _logger;
+
+    public InMemoryDocumentProcessingQueue(
+        DocumentProcessingQueueOptions options,
+        ILogger<InMemoryDocumentProcessingQueue> logger)
     {
+        _options =
+            options;
+
+        _logger =
+            logger;
+
         _queue =
-            Channel.CreateUnbounded<DocumentProcessingMessage>();
+            Channel.CreateBounded<DocumentProcessingMessage>(
+                new BoundedChannelOptions(
+                    _options.Capacity)
+                {
+                    FullMode = BoundedChannelFullMode.Wait,
+                    SingleReader = true,
+                    SingleWriter = false
+                });
     }
 
     public async ValueTask QueueAsync(
@@ -21,9 +43,39 @@ public class InMemoryDocumentProcessingQueue
     {
         ValidateMessage(message);
 
-        await _queue.Writer.WriteAsync(
-            message,
-            cancellationToken);
+        using var timeoutTokenSource =
+            CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+
+        timeoutTokenSource.CancelAfter(
+            TimeSpan.FromSeconds(
+                _options.EnqueueTimeoutSeconds));
+
+        try
+        {
+            await _queue.Writer.WriteAsync(
+                message,
+                timeoutTokenSource.Token);
+
+            _logger.LogInformation(
+                "Document processing message {DocumentId} enqueued. QueueCapacity={QueueCapacity}.",
+                message.DocumentId,
+                _options.Capacity);
+        }
+        catch (OperationCanceledException)
+            when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Document processing queue is full. Document {DocumentId} could not be enqueued within {EnqueueTimeoutSeconds} seconds. QueueCapacity={QueueCapacity}.",
+                message.DocumentId,
+                _options.EnqueueTimeoutSeconds,
+                _options.Capacity);
+
+            throw new DocumentProcessingQueueFullException(
+                _options.Capacity,
+                TimeSpan.FromSeconds(
+                    _options.EnqueueTimeoutSeconds));
+        }
     }
 
     public async ValueTask<DocumentProcessingMessage> DequeueAsync(
