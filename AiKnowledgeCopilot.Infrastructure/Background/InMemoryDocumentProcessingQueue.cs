@@ -26,13 +26,15 @@ public class InMemoryDocumentProcessingQueue
         _logger =
             logger;
 
+        ValidateOptions(_options);
+
         _queue =
             Channel.CreateBounded<DocumentProcessingMessage>(
                 new BoundedChannelOptions(
                     _options.Capacity)
                 {
                     FullMode = BoundedChannelFullMode.Wait,
-                    SingleReader = true,
+                    SingleReader = false,
                     SingleWriter = false
                 });
     }
@@ -83,6 +85,28 @@ public class InMemoryDocumentProcessingQueue
     {
         return await _queue.Reader.ReadAsync(
             cancellationToken);
+    }
+
+    private static void ValidateOptions(
+        DocumentProcessingQueueOptions options)
+    {
+        if (options.Capacity <= 0)
+        {
+            throw new InvalidOperationException(
+                "Document processing queue capacity must be greater than zero.");
+        }
+
+        if (options.EnqueueTimeoutSeconds <= 0)
+        {
+            throw new InvalidOperationException(
+                "Document processing queue enqueue timeout must be greater than zero.");
+        }
+
+        if (options.MaxConcurrentProcessors <= 0)
+        {
+            throw new InvalidOperationException(
+                "MaxConcurrentProcessors must be greater than zero.");
+        }
     }
 
     private static void ValidateMessage(

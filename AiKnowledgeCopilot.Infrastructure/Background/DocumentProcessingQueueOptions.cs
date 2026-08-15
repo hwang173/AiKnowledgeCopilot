@@ -7,4 +7,6 @@ public class DocumentProcessingQueueOptions
     public int Capacity { get; set; } = 100;
 
     public int EnqueueTimeoutSeconds { get; set; } = 5;
+
+    public int MaxConcurrentProcessors { get; set; } = 3;
 }

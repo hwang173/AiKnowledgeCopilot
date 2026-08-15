@@ -3,6 +3,7 @@ using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Repositories;
+using AiKnowledgeCopilot.Infrastructure.Background;
 using AiKnowledgeCopilot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,16 +19,19 @@ public class DocumentProcessingHostedService
 
     private readonly IDocumentProcessingQueue _queue;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly DocumentProcessingQueueOptions _options;
     private readonly ILogger<DocumentProcessingHostedService>
         _logger;
 
     public DocumentProcessingHostedService(
         IDocumentProcessingQueue queue,
         IServiceScopeFactory scopeFactory,
+        DocumentProcessingQueueOptions options,
         ILogger<DocumentProcessingHostedService> logger)
     {
         _queue = queue;
         _scopeFactory = scopeFactory;
+        _options = options;
         _logger = logger;
     }
 
@@ -35,7 +39,28 @@ public class DocumentProcessingHostedService
         CancellationToken stoppingToken)
     {
         _logger.LogInformation(
-            "Document processing worker started.");
+            "Document processing worker started with {ProcessorCount} processors.",
+            _options.MaxConcurrentProcessors);
+
+        var processorTasks =
+            Enumerable
+                .Range(1, _options.MaxConcurrentProcessors)
+                .Select(processorId =>
+                    RunProcessorAsync(
+                        processorId,
+                        stoppingToken))
+                .ToList();
+
+        await Task.WhenAll(processorTasks);
+    }
+
+    private async Task RunProcessorAsync(
+        int processorId,
+        CancellationToken stoppingToken)
+    {
+        _logger.LogInformation(
+            "Document processor {ProcessorId} started.",
+            processorId);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -46,14 +71,17 @@ public class DocumentProcessingHostedService
                         stoppingToken);
 
                 using var logScope =
-                    BeginProcessingLogScope(message);
+                    BeginProcessingLogScope(
+                        processorId,
+                        message);
 
                 var queueDelayMs =
                     (DateTime.UtcNow - message.QueuedAtUtc)
                         .TotalMilliseconds;
 
                 _logger.LogInformation(
-                    "Dequeued document processing message after {QueueDelayMs} ms.",
+                    "Processor {ProcessorId} dequeued document processing message after {QueueDelayMs} ms.",
+                    processorId,
                     queueDelayMs);
 
                 await ProcessDocumentAsync(
@@ -64,23 +92,27 @@ public class DocumentProcessingHostedService
                 when (stoppingToken.IsCancellationRequested)
             {
                 _logger.LogInformation(
-                    "Document processing worker is stopping.");
+                    "Document processor {ProcessorId} is stopping.",
+                    processorId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(
                     ex,
-                    "Unexpected error in document processing worker loop.");
+                    "Unexpected error in document processor {ProcessorId}.",
+                    processorId);
             }
         }
     }
 
     private IDisposable? BeginProcessingLogScope(
+        int processorId,
         DocumentProcessingMessage message)
     {
         return _logger.BeginScope(
             new Dictionary<string, object>
             {
+                ["ProcessorId"] = processorId,
                 ["CorrelationId"] = message.CorrelationId,
                 ["DocumentId"] = message.DocumentId,
                 ["QueuedByUserId"] = message.QueuedByUserId,
