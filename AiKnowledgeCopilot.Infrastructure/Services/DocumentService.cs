@@ -1,4 +1,5 @@
-﻿using AiKnowledgeCopilot.Application.Background;
+﻿using System.Diagnostics;
+using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Documents;
 using AiKnowledgeCopilot.Application.Observability;
 using AiKnowledgeCopilot.Application.Repositories;
@@ -48,6 +49,20 @@ public class DocumentService
     {
         ValidateCommand(command);
 
+        using var activity =
+            AiKnowledgeCopilotTelemetry.ActivitySource
+                .StartActivity(
+                    "document.upload",
+                    ActivityKind.Internal);
+
+        activity?.SetTag(
+            "document.file_name",
+            command.FileName);
+
+        activity?.SetTag(
+            "user.id",
+            command.UploadedByUserId);
+
         var document =
             new Document(
                 command.FileName,
@@ -60,6 +75,10 @@ public class DocumentService
 
         await _documentRepository.SaveChangesAsync(
             cancellationToken);
+
+        activity?.SetTag(
+            "document.id",
+            document.Id);
 
         var message =
             CreateProcessingMessage(
@@ -74,6 +93,10 @@ public class DocumentService
         }
         catch (DocumentProcessingQueueFullException)
         {
+            activity?.SetStatus(
+                ActivityStatusCode.Error,
+                "Document processing queue is full.");
+
             document.MarkAsFailed(
                 "Document processing queue is currently full. Please try uploading again later.");
 
@@ -110,7 +133,13 @@ public class DocumentService
                 queuedByUserId,
 
             QueuedAtUtc =
-                DateTime.UtcNow
+                DateTime.UtcNow,
+
+            TraceParent =
+                Activity.Current?.Id,
+
+            TraceState =
+                Activity.Current?.TraceStateString
         };
     }
 

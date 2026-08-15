@@ -1,3 +1,5 @@
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using System.Net.Http.Headers;
 using System.Text;
 using AiKnowledgeCopilot.API.Middleware;
@@ -58,6 +60,46 @@ try
         WebApplication.CreateBuilder(args);
 
     builder.Host.UseSerilog();
+
+    var openTelemetryOptions =
+    builder.Configuration
+        .GetSection(OpenTelemetryOptions.SectionName)
+        .Get<OpenTelemetryOptions>()
+    ?? new OpenTelemetryOptions();
+
+    if (openTelemetryOptions.SamplingRatio < 0 ||
+        openTelemetryOptions.SamplingRatio > 1)
+    {
+        throw new InvalidOperationException(
+            "OpenTelemetry:SamplingRatio must be between 0.0 and 1.0.");
+    }
+
+    builder.Services.AddSingleton(openTelemetryOptions);
+
+    builder.Services
+        .AddOpenTelemetry()
+        .ConfigureResource(resource =>
+        {
+            resource.AddService(
+                serviceName: openTelemetryOptions.ServiceName,
+                serviceVersion: openTelemetryOptions.ServiceVersion);
+        })
+        .WithTracing(tracing =>
+        {
+            tracing
+                .SetSampler(
+                    new TraceIdRatioBasedSampler(
+                        openTelemetryOptions.SamplingRatio))
+                .AddSource(
+                    AiKnowledgeCopilotTelemetry.ActivitySourceName)
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation();
+
+            if (openTelemetryOptions.ConsoleExporterEnabled)
+            {
+                tracing.AddConsoleExporter();
+            }
+        });
 
     var jwtOptions =
         builder.Configuration

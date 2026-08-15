@@ -9,4 +9,8 @@ public class DocumentProcessingMessage
     public string QueuedByUserId { get; init; } = string.Empty;
 
     public DateTime QueuedAtUtc { get; init; }
+
+    public string? TraceParent { get; init; }
+
+    public string? TraceState { get; init; }
 }

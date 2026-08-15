@@ -1,4 +1,6 @@
-﻿using AiKnowledgeCopilot.Application.AI;
+﻿using System.Diagnostics;
+using AiKnowledgeCopilot.Application.Observability;
+using AiKnowledgeCopilot.Application.AI;
 using AiKnowledgeCopilot.Application.Background;
 using AiKnowledgeCopilot.Application.Chunking;
 using AiKnowledgeCopilot.Application.Documents;
@@ -75,9 +77,18 @@ public class DocumentProcessingHostedService
                         processorId,
                         message);
 
+                using var activity =
+                    StartProcessingActivity(
+                        processorId,
+                        message);
+
                 var queueDelayMs =
                     (DateTime.UtcNow - message.QueuedAtUtc)
                         .TotalMilliseconds;
+
+                activity?.SetTag(
+                    "messaging.queue.delay_ms",
+                    queueDelayMs);
 
                 _logger.LogInformation(
                     "Processor {ProcessorId} dequeued document processing message after {QueueDelayMs} ms.",
@@ -275,6 +286,10 @@ public class DocumentProcessingHostedService
             return false;
         }
 
+        Activity.Current?.SetTag(
+            "document.chunk_count",
+            chunks.Count);
+
         _logger.LogInformation(
             "Document {DocumentId} produced {ChunkCount} chunks.",
             document.Id,
@@ -305,6 +320,10 @@ public class DocumentProcessingHostedService
             _logger.LogInformation(
                 "Extracted text from document {DocumentId}. TextLength={TextLength}.",
                 document.Id,
+                documentContent.Length);
+
+            Activity.Current?.SetTag(
+                "document.text_length",
                 documentContent.Length);
 
             return documentContent;
@@ -381,6 +400,9 @@ public class DocumentProcessingHostedService
         _logger.LogInformation(
             "Document {DocumentId} processed successfully.",
             document.Id);
+
+        Activity.Current?.SetStatus(
+            ActivityStatusCode.Ok);
     }
 
     private async Task FailDocumentAsync(
@@ -403,6 +425,19 @@ public class DocumentProcessingHostedService
             "Document {DocumentId} failed. Reason: {FailureReason}",
             document.Id,
             failureReason);
+
+        Activity.Current?.SetStatus(
+            ActivityStatusCode.Error,
+            failureReason);
+
+        Activity.Current?.AddEvent(
+            new ActivityEvent(
+                "document.processing.failed",
+                tags: new ActivityTagsCollection
+                {
+                    ["exception.type"] = exception.GetType().FullName,
+                    ["exception.message"] = exception.Message
+                }));
     }
 
     private async Task FailDocumentAsync(
@@ -458,6 +493,57 @@ public class DocumentProcessingHostedService
         }
 
         return failureReason[..MaxFailureReasonLength];
+    }
+
+    private static Activity? StartProcessingActivity(
+    int processorId,
+    DocumentProcessingMessage message)
+    {
+        ActivityContext parentContext =
+            default;
+
+        var hasParentContext =
+            !string.IsNullOrWhiteSpace(message.TraceParent) &&
+            ActivityContext.TryParse(
+                message.TraceParent,
+                message.TraceState,
+                out parentContext);
+
+        var activity =
+            hasParentContext
+                ? AiKnowledgeCopilotTelemetry.ActivitySource.StartActivity(
+                    "document.process",
+                    ActivityKind.Consumer,
+                    parentContext)
+                : AiKnowledgeCopilotTelemetry.ActivitySource.StartActivity(
+                    "document.process",
+                    ActivityKind.Consumer);
+
+        activity?.SetTag(
+            "processor.id",
+            processorId);
+
+        activity?.SetTag(
+            "document.id",
+            message.DocumentId);
+
+        activity?.SetTag(
+            "user.id",
+            message.QueuedByUserId);
+
+        activity?.SetTag(
+            "messaging.system",
+            "in-memory-channel");
+
+        activity?.SetTag(
+            "messaging.operation",
+            "process");
+
+        activity?.SetTag(
+            "messaging.destination.name",
+            "document-processing");
+
+        return activity;
     }
 
     private sealed record ProcessingServices(
