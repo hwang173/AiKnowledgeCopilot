@@ -13,4 +13,4 @@ Built a production-style AI-powered enterprise knowledge assistant using ASP.NET
 - Designed observability stack with Serilog + OpenTelemetry
 - Containerized services using Docker
 - Configured CI/CD pipelines with Azure DevOps (WIP)
-- Achieved scalable concurrent document processing  (WIP)
+- Achieved scalable concurrent document processing
