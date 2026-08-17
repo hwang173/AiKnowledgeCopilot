@@ -12,5 +12,10 @@ public class OpenTelemetryOptions
 
     public bool ConsoleExporterEnabled { get; set; } = true;
 
+    public bool OtlpExporterEnabled { get; set; } = false;
+
+    public string OtlpEndpoint { get; set; } =
+        "http://localhost:4317";
+
     public double SamplingRatio { get; set; } = 1.0;
 }

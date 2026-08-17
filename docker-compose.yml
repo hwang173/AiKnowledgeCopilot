@@ -23,5 +23,18 @@ services:
     ports:
       - "6379:6379"
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+
+    container_name: ai-knowledge-jaeger
+
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+
 volumes:
   postgres_data:

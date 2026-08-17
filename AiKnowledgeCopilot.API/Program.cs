@@ -1,3 +1,4 @@
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using System.Net.Http.Headers;
@@ -98,6 +99,18 @@ try
             if (openTelemetryOptions.ConsoleExporterEnabled)
             {
                 tracing.AddConsoleExporter();
+            }
+
+            if (openTelemetryOptions.OtlpExporterEnabled)
+            {
+                tracing.AddOtlpExporter(options =>
+                {
+                    options.Endpoint =
+                        new Uri(openTelemetryOptions.OtlpEndpoint);
+
+                    options.Protocol =
+                        OtlpExportProtocol.Grpc;
+                });
             }
         });
 
