@@ -12,10 +12,17 @@ public class OpenTelemetryOptions
 
     public bool ConsoleExporterEnabled { get; set; } = true;
 
+    public bool MetricsConsoleExporterEnabled { get; set; } = false;
+
     public bool OtlpExporterEnabled { get; set; } = false;
 
     public string OtlpEndpoint { get; set; } =
         "http://localhost:4317";
+
+    public bool PrometheusExporterEnabled { get; set; } = true;
+
+    public string PrometheusScrapingEndpoint { get; set; } =
+        "/metrics";
 
     public double SamplingRatio { get; set; } = 1.0;
 }

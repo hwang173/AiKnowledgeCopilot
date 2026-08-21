@@ -1,3 +1,6 @@
+using AiKnowledgeCopilot.API.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -111,6 +114,33 @@ try
                     options.Protocol =
                         OtlpExportProtocol.Grpc;
                 });
+            }
+        })
+        .WithMetrics(metrics =>
+        {
+            metrics
+                .AddMeter(
+                    AiKnowledgeCopilotTelemetry.MeterName)
+                .AddMeter(
+                    "Microsoft.AspNetCore.Hosting")
+                .AddMeter(
+                    "Microsoft.AspNetCore.Server.Kestrel")
+                .AddMeter(
+                    "System.Net.Http")
+                .AddMeter(
+                    "System.Net.NameResolution")
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddRuntimeInstrumentation();
+
+            if (openTelemetryOptions.MetricsConsoleExporterEnabled)
+            {
+                metrics.AddConsoleExporter();
+            }
+
+            if (openTelemetryOptions.PrometheusExporterEnabled)
+            {
+                metrics.AddPrometheusExporter();
             }
         });
 
@@ -322,6 +352,22 @@ try
     builder.Services.AddHostedService<
         DocumentProcessingHostedService>();
 
+    builder.Services
+    .AddHealthChecks()
+    .AddCheck(
+        "self",
+        () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(),
+        tags: new[] { "live" })
+    .AddCheck<DatabaseHealthCheck>(
+        "postgresql",
+        tags: new[] { "ready", "database" })
+    .AddCheck<RedisHealthCheck>(
+        "redis",
+        tags: new[] { "ready", "cache" })
+    .AddCheck<OpenAiConfigurationHealthCheck>(
+        "openai_configuration",
+        tags: new[] { "ready", "external-ai" });
+
     builder.Services.AddControllers();
 
     builder.Services.AddEndpointsApiExplorer();
@@ -390,6 +436,32 @@ try
     app.UseMiddleware<RequestCorrelationMiddleware>();
 
     app.UseAuthorization();
+
+    app.MapHealthChecks(
+    "/health/live",
+    new HealthCheckOptions
+    {
+        Predicate = check =>
+            check.Tags.Contains("live"),
+        ResponseWriter =
+            HealthCheckResponseWriter.WriteAsync
+    });
+
+    app.MapHealthChecks(
+        "/health/ready",
+        new HealthCheckOptions
+        {
+            Predicate = check =>
+                check.Tags.Contains("ready"),
+            ResponseWriter =
+                HealthCheckResponseWriter.WriteAsync
+        });
+
+    if (openTelemetryOptions.PrometheusExporterEnabled)
+    {
+        app.MapPrometheusScrapingEndpoint(
+            openTelemetryOptions.PrometheusScrapingEndpoint);
+    }
 
     app.MapControllers();
 

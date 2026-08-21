@@ -1,4 +1,5 @@
 ﻿using AiKnowledgeCopilot.Application.AI;
+using AiKnowledgeCopilot.Application.Observability;
 using Microsoft.Extensions.Logging;
 
 namespace AiKnowledgeCopilot.Infrastructure.AI;
@@ -40,12 +41,24 @@ public class CachedEmbeddingService : IEmbeddingService
 
         if (!string.IsNullOrWhiteSpace(cachedEmbedding))
         {
+            AiKnowledgeCopilotTelemetry.EmbeddingCacheHitCounter.Add(
+                1,
+                new KeyValuePair<string, object?>(
+                    "model",
+                    _options.EmbeddingModel));
+
             _logger.LogInformation(
                 "Embedding cache hit for model {Model}.",
                 _options.EmbeddingModel);
 
             return cachedEmbedding;
         }
+
+        AiKnowledgeCopilotTelemetry.EmbeddingCacheMissCounter.Add(
+            1,
+            new KeyValuePair<string, object?>(
+                "model",
+                _options.EmbeddingModel));
 
         _logger.LogInformation(
             "Embedding cache miss for model {Model}.",

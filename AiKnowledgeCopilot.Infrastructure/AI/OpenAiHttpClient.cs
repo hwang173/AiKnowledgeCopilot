@@ -1,6 +1,8 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Text;
 using System.Text.Json;
+using AiKnowledgeCopilot.Application.Observability;
 using Microsoft.Extensions.Logging;
 
 namespace AiKnowledgeCopilot.Infrastructure.AI;
@@ -42,6 +44,13 @@ public class OpenAiHttpClient
     {
         ValidateEndpoint(endpoint);
 
+        AiKnowledgeCopilotTelemetry.OpenAiRequestCounter.Add(
+            1,
+            CreateEndpointTag(endpoint));
+
+        var stopwatch =
+            Stopwatch.StartNew();
+
         for (int attempt = 1;
              attempt <= _options.MaxRetryAttempts + 1;
              attempt++)
@@ -68,6 +77,11 @@ public class OpenAiHttpClient
 
                 if (response.IsSuccessStatusCode)
                 {
+                    RecordRequestDuration(
+                        endpoint,
+                        response.StatusCode,
+                        stopwatch.Elapsed);
+
                     return await response.Content
                         .ReadAsStringAsync(
                             cancellationToken);
@@ -81,12 +95,18 @@ public class OpenAiHttpClient
                 if (!ShouldRetry(response.StatusCode) ||
                     attempt > _options.MaxRetryAttempts)
                 {
+                    RecordFailure(
+                        endpoint,
+                        response.StatusCode,
+                        stopwatch.Elapsed);
+
                     throw CreateHttpException(
                         response.StatusCode,
                         responseBody);
                 }
 
                 await DelayBeforeRetryAsync(
+                    endpoint,
                     attempt,
                     response.StatusCode,
                     cancellationToken);
@@ -96,19 +116,46 @@ public class OpenAiHttpClient
                       attempt <= _options.MaxRetryAttempts)
             {
                 await DelayBeforeRetryAsync(
+                    endpoint,
                     attempt,
                     null,
                     cancellationToken);
             }
-            catch (HttpRequestException)
-                when (attempt <= _options.MaxRetryAttempts)
+            catch (OperationCanceledException)
+                when (!cancellationToken.IsCancellationRequested)
+            {
+                RecordFailure(
+                    endpoint,
+                    null,
+                    stopwatch.Elapsed);
+
+                throw;
+            }
+            catch (HttpRequestException ex)
+                when (ex.StatusCode is null &&
+                      attempt <= _options.MaxRetryAttempts)
             {
                 await DelayBeforeRetryAsync(
+                    endpoint,
                     attempt,
                     null,
                     cancellationToken);
             }
+            catch (HttpRequestException ex)
+            {
+                RecordFailure(
+                    endpoint,
+                    ex.StatusCode,
+                    stopwatch.Elapsed);
+
+                throw;
+            }
         }
+
+        RecordFailure(
+            endpoint,
+            null,
+            stopwatch.Elapsed);
 
         throw new InvalidOperationException(
             "OpenAI request retry pipeline ended unexpectedly.");
@@ -144,6 +191,7 @@ public class OpenAiHttpClient
     }
 
     private async Task DelayBeforeRetryAsync(
+        string endpoint,
         int attempt,
         HttpStatusCode? statusCode,
         CancellationToken cancellationToken)
@@ -152,6 +200,12 @@ public class OpenAiHttpClient
             TimeSpan.FromSeconds(
                 _options.RetryBaseDelaySeconds *
                 Math.Pow(2, attempt - 1));
+
+        AiKnowledgeCopilotTelemetry.OpenAiRetryCounter.Add(
+            1,
+            CreateOpenAiTags(
+                endpoint,
+                statusCode));
 
         _logger.LogWarning(
             "OpenAI request failed with status {StatusCode}. Retrying attempt {Attempt} after {DelaySeconds} seconds.",
@@ -162,6 +216,62 @@ public class OpenAiHttpClient
         await Task.Delay(
             delay,
             cancellationToken);
+    }
+
+    private static void RecordRequestDuration(
+        string endpoint,
+        HttpStatusCode statusCode,
+        TimeSpan duration)
+    {
+        AiKnowledgeCopilotTelemetry.OpenAiRequestDurationHistogram.Record(
+            duration.TotalMilliseconds,
+            CreateOpenAiTags(
+                endpoint,
+                statusCode));
+    }
+
+    private static void RecordFailure(
+        string endpoint,
+        HttpStatusCode? statusCode,
+        TimeSpan duration)
+    {
+        AiKnowledgeCopilotTelemetry.OpenAiFailureCounter.Add(
+            1,
+            CreateOpenAiTags(
+                endpoint,
+                statusCode));
+
+        AiKnowledgeCopilotTelemetry.OpenAiRequestDurationHistogram.Record(
+            duration.TotalMilliseconds,
+            CreateOpenAiTags(
+                endpoint,
+                statusCode));
+    }
+
+    private static KeyValuePair<string, object?> CreateEndpointTag(
+        string endpoint)
+    {
+        return new KeyValuePair<string, object?>(
+            "endpoint",
+            endpoint);
+    }
+
+    private static KeyValuePair<string, object?>[] CreateOpenAiTags(
+        string endpoint,
+        HttpStatusCode? statusCode)
+    {
+        return
+        [
+            new KeyValuePair<string, object?>(
+                "endpoint",
+                endpoint),
+
+            new KeyValuePair<string, object?>(
+                "http.status_code",
+                statusCode is null
+                    ? "none"
+                    : ((int)statusCode.Value).ToString())
+        ];
     }
 
     private static HttpRequestException CreateHttpException(

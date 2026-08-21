@@ -90,14 +90,28 @@ public class DocumentProcessingHostedService
                     "messaging.queue.delay_ms",
                     queueDelayMs);
 
+                AiKnowledgeCopilotTelemetry.DocumentQueueDelayHistogram.Record(
+                    queueDelayMs);
+
                 _logger.LogInformation(
                     "Processor {ProcessorId} dequeued document processing message after {QueueDelayMs} ms.",
                     processorId,
                     queueDelayMs);
 
-                await ProcessDocumentAsync(
-                    message,
-                    stoppingToken);
+                var processingStopwatch =
+                    Stopwatch.StartNew();
+
+                try
+                {
+                    await ProcessDocumentAsync(
+                        message,
+                        stoppingToken);
+                }
+                finally
+                {
+                    AiKnowledgeCopilotTelemetry.DocumentProcessingDurationHistogram.Record(
+                        processingStopwatch.Elapsed.TotalMilliseconds);
+                }
             }
             catch (OperationCanceledException)
                 when (stoppingToken.IsCancellationRequested)
@@ -401,6 +415,9 @@ public class DocumentProcessingHostedService
             "Document {DocumentId} processed successfully.",
             document.Id);
 
+        AiKnowledgeCopilotTelemetry.DocumentProcessingSucceededCounter.Add(
+            1);
+
         Activity.Current?.SetStatus(
             ActivityStatusCode.Ok);
     }
@@ -454,6 +471,9 @@ public class DocumentProcessingHostedService
 
         await services.Repository.SaveChangesAsync(
             cancellationToken);
+
+        AiKnowledgeCopilotTelemetry.DocumentProcessingFailedCounter.Add(
+            1);
 
         _logger.LogWarning(
             "Document {DocumentId} marked as failed. Reason: {FailureReason}",
